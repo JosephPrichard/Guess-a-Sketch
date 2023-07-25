@@ -9,9 +9,14 @@ import (
 )
 
 const (
-	StartCode      = 0
-	TextCode       = 1
-	DrawCode       = 2
+	// message code constants
+	StartCode  = 0
+	TextCode   = 1
+	DrawCode   = 2
+	ChatCode   = 3
+	ResetCode  = 4
+	FinishCode = 5
+	// room valiation constants
 	MaxColor       = 8
 	MaxX           = 900
 	MaxY           = 500
@@ -39,11 +44,12 @@ type Game struct {
 
 type Room struct {
 	Code           string         // code of the room that uniquely identifies it
+	onGameStart    func(int)      // called whenever the game is reset, takes the time limit for a game as an arg
 	playerLimit    int            // max players that can join room state, all other players will be spectators
 	TotalRounds    int            // total rounds for the game to go through
 	Round          int            // the current round
-	timeLimitSecs  int            // time given for guessing each turn
-	wordBank       []string       // reference to the global wordbank
+	TimeLimitSecs  int            // time given for guessing each turn
+	sharedWordBank []string       // reference to the shared wordbank
 	customWordBank []string       // custom words added in the bank by host
 	Players        []string       // stores all players in the order they joined in
 	ScoreBoard     map[string]int // maps players to scores
@@ -54,20 +60,25 @@ type Room struct {
 func NewGame() *Game {
 	return &Game{
 		Canvas:        make([]DrawMsg, 0),
-		startTimeSecs: time.Now().UnixMilli(),
+		startTimeSecs: time.Now().Unix(),
 		guessers:      make(map[string]bool),
 	}
 }
 
-func NewRoom(code string, wordBank []string) *Room {
+func NewRoom(code string, sharedWordBank []string, onGameStart func(time int)) *Room {
 	return &Room{
 		Code:           code,
-		wordBank:       wordBank,
+		onGameStart:    onGameStart,
+		sharedWordBank: sharedWordBank,
 		customWordBank: make([]string, 0),
 		Players:        make([]string, 0),
 		ScoreBoard:     make(map[string]int),
 		Chat:           make([]ChatMsg, 0),
 	}
+}
+
+func (room *Room) getCurrPlayer() string {
+	return room.Players[room.Game.CurrPlayerIndex]
 }
 
 func (room *Room) Marshal() string {
@@ -104,8 +115,66 @@ func (room *Room) HandleLeave(playerToLeave string) {
 	delete(room.ScoreBoard, playerToLeave)
 }
 
-func (room *Room) getCurrPlayer() string {
-	return room.Players[room.Game.CurrPlayerIndex]
+func (room *Room) ResetGame() (string, error) {
+	prevPlayer := room.getCurrPlayer()
+
+	// update player scores based on the win ratio algorithm
+	scoreInc := len(room.Game.guessers) * 50
+	room.ScoreBoard[room.getCurrPlayer()] += scoreInc
+
+	var b []byte
+	var err error
+	// only restart the game if the game has more rounds
+	if room.Round < room.TotalRounds {
+		// clear all guessers for this game
+		for k := range room.Game.guessers {
+			delete(room.Game.guessers, k)
+		}
+
+		// pick a new word from the shared or custom word bank
+		index := rand.Intn(len(room.sharedWordBank) + len(room.customWordBank))
+		if index < len(room.sharedWordBank) {
+			room.Game.CurrWord = room.sharedWordBank[index]
+		} else {
+			room.Game.CurrWord = room.customWordBank[index]
+		}
+
+		room.Game.Canvas = room.Game.Canvas[0:0]
+
+		// go to the next player, circle back around when we reach the end
+		room.Game.CurrPlayerIndex += 1
+		if room.Game.CurrPlayerIndex >= len(room.Players) {
+			room.Game.CurrPlayerIndex = 0
+			room.Round += 1
+		}
+
+		room.Game.startTimeSecs = time.Now().Unix()
+		room.onGameStart(room.TimeLimitSecs)
+
+		// reset message contains the state changes for the next game
+		resetMsg := ResetMsg{
+			NextWord:      room.Game.CurrWord,
+			NextPlayer:    room.getCurrPlayer(),
+			PrevPlayer:    prevPlayer,
+			GuessScoreInc: scoreInc,
+		}
+		payload := Payload{Code: ResetCode, Msg: resetMsg}
+		b, err = json.Marshal(payload)
+	} else {
+		room.Game = nil
+
+		// finish message contains the results of the game
+		finishMsg := FinishMsg{
+			GuessScoreInc: scoreInc,
+		}
+		payload := Payload{Code: FinishCode, Msg: finishMsg}
+		b, err = json.Marshal(payload)
+	}
+
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (room *Room) HandleMessage(message, player string) (string, error) {
@@ -147,37 +216,11 @@ func (room *Room) onCorrectGuess(player string) int {
 	timeSinceStartSecs := time.Now().Unix() - room.Game.startTimeSecs
 
 	// ratio of time taken to time allowed normalized over 400 points with a minimum of 50
-	scoreInc := (room.timeLimitSecs-int(timeSinceStartSecs))/room.timeLimitSecs*400 + 50
+	scoreInc := (room.TimeLimitSecs-int(timeSinceStartSecs))/room.TimeLimitSecs*400 + 50
 	room.ScoreBoard[player] += scoreInc
 
 	room.Game.guessers[player] = true
 	return scoreInc
-}
-
-func (room *Room) onGameEnd() {
-	// update player scores based on the win ratio algorithm
-	scoreInc := len(room.Game.guessers) * 50
-	room.ScoreBoard[room.getCurrPlayer()] += scoreInc
-	for k := range room.Game.guessers {
-		delete(room.Game.guessers, k)
-	}
-
-	// pick a new word from the word pool
-	index := rand.Intn(len(room.wordBank) + len(room.customWordBank))
-	if index < len(room.wordBank) {
-		room.Game.CurrWord = room.wordBank[index]
-	} else {
-		room.Game.CurrWord = room.customWordBank[index]
-	}
-
-	// resets the length of the canvas without a new allocation
-	room.Game.Canvas = room.Game.Canvas[0:0]
-
-	// go to the next player, circle back around when we reach the end
-	room.Game.CurrPlayerIndex += 1
-	if room.Game.CurrPlayerIndex >= len(room.Players) {
-		room.Game.CurrPlayerIndex = 0
-	}
 }
 
 func (room *Room) handleStartMessage(msg *StartMsg, player string) error {
@@ -199,7 +242,7 @@ func (room *Room) handleStartMessage(msg *StartMsg, player string) error {
 	}
 	// initialize the start game state - the params set in the start message and the new game
 	room.playerLimit = msg.playerLimit
-	room.timeLimitSecs = msg.timeLimitSecs
+	room.TimeLimitSecs = msg.timeLimitSecs
 	room.customWordBank = msg.wordBank
 	room.Game = NewGame()
 	return nil
@@ -218,13 +261,13 @@ func (room *Room) handleTextMessage(msg *TextMsg, player string) (string, error)
 		// check if the curr word is included in the room chat
 		for _, word := range strings.Split(text, " ") {
 			if word == room.Game.CurrWord {
-				newChatMessage.ScoreInc = room.onCorrectGuess(player)
+				newChatMessage.GuessScoreInc = room.onCorrectGuess(player)
 				break
 			}
 		}
 	}
-
-	b, err := json.Marshal(newChatMessage)
+	payload := Payload{Code: ChatCode, Msg: newChatMessage}
+	b, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}

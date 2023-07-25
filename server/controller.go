@@ -91,8 +91,7 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 
 	// create a new subscription channel and join the broker with it
 	ch := make(Subscriber)
-	subMsg := SubscriberMsg{Subscriber: ch, Player: player}
-	broker.Subscribe <- subMsg
+	broker.Subscribe <- SubscriberMsg{Subscriber: ch, Player: player}
 
 	ws.SetCloseHandler(func(int, string) error {
 		broker.Unsubscribe <- ch
@@ -118,7 +117,7 @@ func socketReader(ws *websocket.Conn, broker *Broker, ch Subscriber) {
 		// read any message from the socket and broadcast it to the broker
 		message := string(p)
 		log.Printf("Read a message %s", message)
-		broker.Broadcast <- BroadcastMsg{Message: message, Sender: ch}
+		broker.SendMessage <- SentMsg{Message: message, Sender: ch}
 	}
 }
 

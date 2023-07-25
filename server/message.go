@@ -24,9 +24,20 @@ type DrawMsg struct {
 }
 
 type ChatMsg struct {
-	Player   string
-	Text     string
-	ScoreInc int `json:"scoreInc,omitempty"`
+	Player        string
+	Text          string
+	GuessScoreInc int `json:"scoreInc,omitempty"`
+}
+
+type ResetMsg struct {
+	NextWord      string
+	NextPlayer    string
+	PrevPlayer    string
+	GuessScoreInc int
+}
+
+type FinishMsg struct {
+	GuessScoreInc int
 }
 
 type ErrorMsg struct {

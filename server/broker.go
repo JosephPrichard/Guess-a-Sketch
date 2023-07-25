@@ -1,10 +1,14 @@
 package server
 
-import "log"
+import (
+	"encoding/json"
+	"log"
+	"time"
+)
 
 type Subscriber = chan string
 
-type BroadcastMsg struct {
+type SentMsg struct {
 	Message string
 	Sender  Subscriber
 }
@@ -17,7 +21,8 @@ type SubscriberMsg struct {
 type Broker struct {
 	Subscribe   chan SubscriberMsg
 	Unsubscribe chan Subscriber
-	Broadcast   chan BroadcastMsg
+	SendMessage chan SentMsg
+	ResetState  chan struct{}
 	Stop        chan struct{}
 }
 
@@ -25,13 +30,22 @@ func NewBroker() *Broker {
 	return &Broker{
 		Subscribe:   make(chan SubscriberMsg),
 		Unsubscribe: make(chan Subscriber),
-		Broadcast:   make(chan BroadcastMsg),
+		SendMessage: make(chan SentMsg),
+		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
 	}
 }
 
 func (broker *Broker) Start(code string, wordBank []string) {
-	room := NewRoom(code, wordBank)
+	onGameStart := func(timeSecs int) {
+		// whenever a game starts, the timer to reset the game after the input delay must be set
+		go func() {
+			time.Sleep(time.Duration(timeSecs) * time.Second)
+			broker.ResetState <- struct{}{}
+		}()
+	}
+
+	room := NewRoom(code, wordBank, onGameStart)
 	subscribers := make(map[chan string]string)
 
 	// blocks this goroutine to listen to messages on each channel until told to stop
@@ -51,18 +65,38 @@ func (broker *Broker) Start(code string, wordBank []string) {
 			room.HandleLeave(player)
 			delete(subscribers, subscriber)
 
-		case broadcastMsg := <-broker.Broadcast:
+		case sentMsg := <-broker.SendMessage:
 			// handle the message and get a response, then handle the error case
-			player := subscribers[broadcastMsg.Sender]
-			resp, err := room.HandleMessage(broadcastMsg.Message, player)
+			player := subscribers[sentMsg.Sender]
+			resp, err := room.HandleMessage(sentMsg.Message, player)
 			if err != nil {
-				SendErrMsg(broadcastMsg.Sender, err.Error())
+				// only the sender should receieve the error response
+				SendErrMsg(sentMsg.Sender, err.Error())
 				continue
 			}
+			// broadcast a non error response to all subscribers
 			for s := range subscribers {
 				s <- resp
 			}
 
+		case <-broker.ResetState:
+			// reset the game and get a response, then handle the error cose
+			resp, err := room.ResetGame()
+			if err != nil {
+				// if an error does exist, serialize it and replace the success message with it
+				errMsg := ErrorMsg{ErrorDesc: err.Error()}
+				b, err := json.Marshal(errMsg)
+				if err != nil {
+					log.Printf("Failed to serialize error for ws message")
+					return
+				}
+				resp = string(b)
+			}
+			// broadcast the response to all subscribers - error or not
+			for s := range subscribers {
+				s <- resp
+			}
+			
 		case <-broker.Stop:
 			return
 		}
