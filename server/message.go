@@ -6,7 +6,9 @@ import (
 	"net/http"
 )
 
-type StartMsg struct {
+const MARSHAL_ERR_MSG = "Failed to unmarshal/mashall input data"
+
+type OptionsMsg struct {
 	playerLimit   int
 	timeLimitSecs int
 	wordBank      []string
@@ -29,14 +31,14 @@ type ChatMsg struct {
 	GuessScoreInc int `json:"scoreInc,omitempty"`
 }
 
-type ResetMsg struct {
-	NextWord      string
-	NextPlayer    string
-	PrevPlayer    string
-	GuessScoreInc int
+type BeginMsg struct {
+	NextWord   string
+	NextPlayer string
 }
 
 type FinishMsg struct {
+	*BeginMsg
+	PrevPlayer    string
 	GuessScoreInc int
 }
 

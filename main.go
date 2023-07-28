@@ -2,25 +2,27 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"guessasketch/server"
 	"log"
 	"net/http"
 	"strings"
 )
 
-func getWordBank() []string {
-	//go:embed words.txt
-	var f embed.FS
-	data, _ := f.ReadFile("hello.txt")
-	gameWordBank := strings.Split(string(data), "\n")
-	log.Printf("Word bank size %d", len(gameWordBank))
-	return gameWordBank
-}
+//go:embed words.txt
+var f embed.FS
 
 func main() {
 	log.Printf("Started the server...")
 
-	gameWordBank := getWordBank()
+	data, err := f.ReadFile("words.txt")
+	if err != nil {
+        fmt.Println("Error reading embedded file:", err)
+        return
+    }
+	gameWordBank := strings.Split(string(data), "\n")
+	// log.Printf("Word bank size %s", string(data))
+
 	wsController := server.NewWsController(gameWordBank)
 
 	http.HandleFunc("/rooms/create", wsController.CreateRoom)

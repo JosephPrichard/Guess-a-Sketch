@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
@@ -10,31 +11,31 @@ import (
 
 const (
 	// message code constants
-	StartCode  = 0
-	TextCode   = 1
-	DrawCode   = 2
-	ChatCode   = 3
-	ResetCode  = 4
-	FinishCode = 5
-	// room valiation constants
-	MaxColor       = 8
-	MaxX           = 900
-	MaxY           = 500
-	MaxRadius      = 8
-	MinWordBank    = 10
-	MinTime        = 15
-	MaxTime        = 360
-	MinPlayerLimit = 2
-	MaxPlayerLimit = 12
-	MaxChatChars   = 50
+	OptionsCode     = 0
+	StartCode       = 1
+	TextCode        = 2
+	DrawCode        = 3
+	ChatCode        = 4
+	FinishRoundCode = 5
+	FinishGameCode  = 6
+	BeginCode       = 7
+	// room state constants that store room relative to game
+	Before = 0
+	During = 1
+	After  = 2
 )
 
-type Payload struct {
+type InputPayload struct {
 	Code int
-	Msg  any
+	Msg  json.RawMessage
 }
 
-type Game struct {
+type OutputPayload struct {
+	Code int
+	Msg  interface{}
+}
+
+type GameState struct {
 	CurrWord        string          // current word to guess in session
 	CurrPlayerIndex int             // index of player drawing on canvas
 	Canvas          []DrawMsg       // canvas of draw actions, acts as a sparse matrix which can be used to contruct a bitmap
@@ -43,57 +44,65 @@ type Game struct {
 }
 
 type Room struct {
-	Code           string         // code of the room that uniquely identifies it
-	onGameStart    func(int)      // called whenever the game is reset, takes the time limit for a game as an arg
-	playerLimit    int            // max players that can join room state, all other players will be spectators
-	TotalRounds    int            // total rounds for the game to go through
-	Round          int            // the current round
-	TimeLimitSecs  int            // time given for guessing each turn
-	sharedWordBank []string       // reference to the shared wordbank
-	customWordBank []string       // custom words added in the bank by host
-	Players        []string       // stores all players in the order they joined in
-	ScoreBoard     map[string]int // maps players to scores
-	Chat           []ChatMsg      // stores the chat log
-	Game           *Game          // if the game phase is nil, no game is being played
+	Code            string         // code of the room that uniquely identifies it
+	startResetTimer func(int)      // called whenever the game is reset, takes the time limit for a game as an arg
+	playerLimit     int            // max players that can join room state
+	TotalRounds     int            // total rounds for the game to go through
+	Round           int            // the current round
+	TimeLimitSecs   int            // time given for guessing each turn
+	sharedWordBank  []string       // reference to the shared wordbank
+	customWordBank  []string       // custom words added in the bank by host
+	Players         []string       // stores all players in the order they joined in
+	ScoreBoard      map[string]int // maps players to scores
+	Chat            []ChatMsg      // stores the chat log
+	Stage           int            // the current stage the room is in
+	Game            *GameState     // if the game state is nil, no game is being played
 }
 
-func NewGame() *Game {
-	return &Game{
-		Canvas:        make([]DrawMsg, 0),
-		startTimeSecs: time.Now().Unix(),
-		guessers:      make(map[string]bool),
+func NewGame() *GameState {
+	return &GameState{
+		Canvas:          make([]DrawMsg, 0),
+		CurrPlayerIndex: -1,
+		startTimeSecs:   time.Now().Unix(),
+		guessers:        make(map[string]bool),
 	}
 }
 
-func NewRoom(code string, sharedWordBank []string, onGameStart func(time int)) *Room {
+func NewRoom(code string, sharedWordBank []string, startResetTimer func(time int)) *Room {
 	return &Room{
-		Code:           code,
-		onGameStart:    onGameStart,
-		sharedWordBank: sharedWordBank,
-		customWordBank: make([]string, 0),
-		Players:        make([]string, 0),
-		ScoreBoard:     make(map[string]int),
-		Chat:           make([]ChatMsg, 0),
+		Code:            code,
+		startResetTimer: startResetTimer,
+		sharedWordBank:  sharedWordBank,
+		customWordBank:  make([]string, 0),
+		Players:         make([]string, 0),
+		ScoreBoard:      make(map[string]int),
+		Chat:            make([]ChatMsg, 0),
+		Stage:           Before,
 	}
 }
 
 func (room *Room) getCurrPlayer() string {
+	if room.Game.CurrPlayerIndex < 0 {
+		return ""
+	}
 	return room.Players[room.Game.CurrPlayerIndex]
+}
+
+func (room *Room) playerIsHost(player string) bool {
+	return len(room.Players) < 1 && room.Players[0] != player
 }
 
 func (room *Room) Marshal() string {
 	b, err := json.Marshal(room)
 	if err != nil {
-		return err.Error()
+		return MARSHAL_ERR_MSG
 	}
 	return string(b)
 }
 
 func (room *Room) HandleJoin(player string) {
-	if len(room.Players) < room.playerLimit {
-		room.Players = append(room.Players, player)
-		room.ScoreBoard[player] = 0
-	}
+	room.Players = append(room.Players, player)
+	room.ScoreBoard[player] = 0
 }
 
 func (room *Room) HandleLeave(playerToLeave string) {
@@ -115,96 +124,72 @@ func (room *Room) HandleLeave(playerToLeave string) {
 	delete(room.ScoreBoard, playerToLeave)
 }
 
+func (room *Room) StartGame() {
+	// clear all guessers for this game
+	for k := range room.Game.guessers {
+		delete(room.Game.guessers, k)
+	}
+
+	// pick a new word from the shared or custom word bank
+	index := rand.Intn(len(room.sharedWordBank) + len(room.customWordBank))
+	if index < len(room.sharedWordBank) {
+		room.Game.CurrWord = room.sharedWordBank[index]
+	} else {
+		room.Game.CurrWord = room.customWordBank[index]
+	}
+
+	room.Game.Canvas = room.Game.Canvas[0:0]
+
+	// go to the next player, circle back around when we reach the end
+	room.Game.CurrPlayerIndex += 1
+	if room.Game.CurrPlayerIndex >= len(room.Players) {
+		room.Game.CurrPlayerIndex = 0
+		room.Round += 1
+	}
+
+	room.Game.startTimeSecs = time.Now().Unix()
+	go room.startResetTimer(room.TimeLimitSecs)
+}
+
 func (room *Room) ResetGame() (string, error) {
+	log.Printf("Resetting the game for code %s", room.Code)
 	prevPlayer := room.getCurrPlayer()
 
 	// update player scores based on the win ratio algorithm
 	scoreInc := len(room.Game.guessers) * 50
 	room.ScoreBoard[room.getCurrPlayer()] += scoreInc
 
-	var b []byte
-	var err error
+	var payload OutputPayload
 	// only restart the game if the game has more rounds
 	if room.Round < room.TotalRounds {
-		// clear all guessers for this game
-		for k := range room.Game.guessers {
-			delete(room.Game.guessers, k)
-		}
-
-		// pick a new word from the shared or custom word bank
-		index := rand.Intn(len(room.sharedWordBank) + len(room.customWordBank))
-		if index < len(room.sharedWordBank) {
-			room.Game.CurrWord = room.sharedWordBank[index]
-		} else {
-			room.Game.CurrWord = room.customWordBank[index]
-		}
-
-		room.Game.Canvas = room.Game.Canvas[0:0]
-
-		// go to the next player, circle back around when we reach the end
-		room.Game.CurrPlayerIndex += 1
-		if room.Game.CurrPlayerIndex >= len(room.Players) {
-			room.Game.CurrPlayerIndex = 0
-			room.Round += 1
-		}
-
-		room.Game.startTimeSecs = time.Now().Unix()
-		room.onGameStart(room.TimeLimitSecs)
+		room.StartGame()
 
 		// reset message contains the state changes for the next game
-		resetMsg := ResetMsg{
-			NextWord:      room.Game.CurrWord,
-			NextPlayer:    room.getCurrPlayer(),
+		finishMsg := FinishMsg{
+			BeginMsg: &BeginMsg{
+				NextWord:      room.Game.CurrWord,
+				NextPlayer:    room.getCurrPlayer(),
+			},
 			PrevPlayer:    prevPlayer,
 			GuessScoreInc: scoreInc,
 		}
-		payload := Payload{Code: ResetCode, Msg: resetMsg}
-		b, err = json.Marshal(payload)
+		payload = OutputPayload{Code: FinishRoundCode, Msg: finishMsg}
 	} else {
 		room.Game = nil
 
 		// finish message contains the results of the game
 		finishMsg := FinishMsg{
+			PrevPlayer:    prevPlayer,
 			GuessScoreInc: scoreInc,
 		}
-		payload := Payload{Code: FinishCode, Msg: finishMsg}
-		b, err = json.Marshal(payload)
+		payload = OutputPayload{Code: FinishGameCode, Msg: finishMsg}
 	}
 
+	b, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", errors.New(MARSHAL_ERR_MSG)
 	}
 	return string(b), nil
-}
-
-func (room *Room) HandleMessage(message, player string) (string, error) {
-	// deserialize payload message from json
-	var payload Payload
-	err := json.Unmarshal([]byte(message), &payload)
-	if err != nil {
-		return "", err
-	}
-
-	switch payload.Code {
-	case StartCode:
-		inputMsg := payload.Msg.(StartMsg)
-		err = room.handleStartMessage(&inputMsg, player)
-	case TextCode:
-		inputMsg := payload.Msg.(TextMsg)
-		message, err = room.handleTextMessage(&inputMsg, player)
-	case DrawCode:
-		inputMsg := payload.Msg.(DrawMsg)
-		err = room.handleDrawMessage(&inputMsg, player)
-	default:
-		err = errors.New("No matching message types for message")
-	}
-
-	if err != nil {
-		return "", err
-	}
-
-	// sends back the input message back for all cases
-	return message, nil
 }
 
 func (room *Room) onCorrectGuess(player string) int {
@@ -223,35 +208,98 @@ func (room *Room) onCorrectGuess(player string) int {
 	return scoreInc
 }
 
-func (room *Room) handleStartMessage(msg *StartMsg, player string) error {
-	// perform validation to confirm a game can be started
-	if len(room.Players) < 1 && room.Players[0] != player {
-		return errors.New("Player must be the host to start the game")
+func (room *Room) HandleMessage(message, player string) (string, error) {
+	// deserialize payload message from json
+	var payload InputPayload
+	err := json.Unmarshal([]byte(message), &payload)
+	if err != nil {
+		return "", err
+	}
+
+	switch payload.Code {
+	case OptionsCode:
+		var inputMsg OptionsMsg
+		err = json.Unmarshal(payload.Msg, &inputMsg)
+		if err != nil {
+			return "", errors.New(MARSHAL_ERR_MSG)
+		}
+		err = room.handleOptionsMessage(&inputMsg, player)
+	case StartCode:
+		message, err = room.handleStartMessage(player)
+	case TextCode:
+		var inputMsg TextMsg
+		err = json.Unmarshal(payload.Msg, &inputMsg)
+		if err != nil {
+			return "", errors.New(MARSHAL_ERR_MSG)
+		}
+		message, err = room.handleTextMessage(&inputMsg, player)
+	case DrawCode:
+		var inputMsg DrawMsg
+		err = json.Unmarshal(payload.Msg, &inputMsg)
+		if err != nil {
+			return "", errors.New(MARSHAL_ERR_MSG)
+		}
+		err = room.handleDrawMessage(&inputMsg, player)
+	default:
+		err = errors.New("No matching message types for message")
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	// sends back the input message back for all cases
+	return message, nil
+}
+
+func (room *Room) handleOptionsMessage(msg *OptionsMsg, player string) error {
+	if room.playerIsHost(player) {
+		return errors.New("Player must be the host to change the game options")
 	}
 	if room.Game != nil {
-		return errors.New("Cannot start a game already in session")
+		return errors.New("Cannot modify options for a game already in session")
 	}
-	if len(msg.wordBank) < MinWordBank {
-		return errors.New("Player was unable to start the game")
+	if len(msg.wordBank) < 10 {
+		return errors.New("Word bank must have at least 10 words")
 	}
-	if msg.timeLimitSecs < MinTime || msg.timeLimitSecs > MaxTime {
+	if msg.timeLimitSecs < 15 || msg.timeLimitSecs > 360 {
 		return errors.New("Time limit must be between 15 and 360 seconds")
 	}
-	if msg.playerLimit < MinPlayerLimit || msg.playerLimit > MaxPlayerLimit {
-		return errors.New("Games can only contain between 2 and 32 players")
+	if msg.playerLimit < 2 || msg.playerLimit > 12 {
+		return errors.New("Games can only contain between 2 and 12 players")
 	}
 	// initialize the start game state - the params set in the start message and the new game
 	room.playerLimit = msg.playerLimit
 	room.TimeLimitSecs = msg.timeLimitSecs
 	room.customWordBank = msg.wordBank
-	room.Game = NewGame()
 	return nil
+}
+
+func (room *Room) handleStartMessage(player string) (string, error) {
+	if room.playerIsHost(player) {
+		return "", errors.New("Player must be the host to start the game")
+	}
+	if room.Game != nil {
+		return "", errors.New("Cannot start a game that is already started")
+	}
+	room.Game = NewGame()
+	room.StartGame()
+	beginMsg := BeginMsg{
+		NextWord:   room.Game.CurrWord,
+		NextPlayer: room.getCurrPlayer(),
+	}
+	payload := OutputPayload{Code: BeginCode, Msg: beginMsg}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", errors.New(MARSHAL_ERR_MSG)
+	}
+	return string(b), nil
 }
 
 func (room *Room) handleTextMessage(msg *TextMsg, player string) (string, error) {
 	text := msg.Text
-	if len(text) > MaxChatChars {
-		return "", errors.New("Chat message must be less than 50 characters")
+	if len(text) > 50 || len(text) < 5 {
+		return "", errors.New("Chat message must be less than 50 characters in length and more than 5")
 	}
 
 	newChatMessage := ChatMsg{Text: text, Player: player}
@@ -266,11 +314,12 @@ func (room *Room) handleTextMessage(msg *TextMsg, player string) (string, error)
 			}
 		}
 	}
-	payload := Payload{Code: ChatCode, Msg: newChatMessage}
+	payload := OutputPayload{Code: ChatCode, Msg: newChatMessage}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", errors.New(MARSHAL_ERR_MSG)
 	}
+	log.Printf("Chat message, %s: %s", player, msg.Text)
 	return string(b), nil
 }
 
@@ -281,8 +330,11 @@ func (room *Room) handleDrawMessage(msg *DrawMsg, player string) error {
 	if player != room.getCurrPlayer() {
 		return errors.New("Player cannot draw on the canvas")
 	}
-	if msg.Color > MaxColor || msg.X > MaxX || msg.Y > MaxY || msg.Radius > MaxRadius {
-		return errors.New("Invalid draw format: color, x, y, and radius must match constraints")
+	if msg.Color > 8 || msg.Radius > 8 {
+		return errors.New("Color and radius enums must be between 0 and 8")
+	}
+	if msg.Y > 800 || msg.X > 500 {
+		return errors.New("Circles must be drawn at the board between 0,0 and 800,500")
 	}
 	room.Game.Canvas = append(room.Game.Canvas, *msg)
 	return nil

@@ -37,15 +37,13 @@ func NewBroker() *Broker {
 }
 
 func (broker *Broker) Start(code string, wordBank []string) {
-	onGameStart := func(timeSecs int) {
-		// whenever a game starts, the timer to reset the game after the input delay must be set
-		go func() {
-			time.Sleep(time.Duration(timeSecs) * time.Second)
-			broker.ResetState <- struct{}{}
-		}()
+	// whenever a game starts, the timer to reset the game after the input delay must be set
+	startResetTimer := func(timeSecs int) {
+		time.Sleep(time.Duration(timeSecs) * time.Second)
+		broker.ResetState <- struct{}{}
 	}
 
-	room := NewRoom(code, wordBank, onGameStart)
+	room := NewRoom(code, wordBank, startResetTimer)
 	subscribers := make(map[chan string]string)
 
 	// blocks this goroutine to listen to messages on each channel until told to stop
@@ -96,7 +94,7 @@ func (broker *Broker) Start(code string, wordBank []string) {
 			for s := range subscribers {
 				s <- resp
 			}
-			
+
 		case <-broker.Stop:
 			return
 		}
