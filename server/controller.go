@@ -116,7 +116,6 @@ func socketReader(ws *websocket.Conn, broker *Broker, ch Subscriber) {
 
 		// read any message from the socket and broadcast it to the broker
 		message := string(p)
-		log.Printf("Read a message %s", message)
 		broker.SendMessage <- SentMsg{Message: message, Sender: ch}
 	}
 }
@@ -127,7 +126,6 @@ func socketWriter(ws *websocket.Conn, ch Subscriber) {
 		// read values from channel and write back to socket
 		resp := <-ch
 
-		log.Printf("Reading a message on subscribed channel %s", resp)
 		err := ws.WriteMessage(websocket.TextMessage, []byte(resp))
 		if err != nil {
 			log.Println(err)

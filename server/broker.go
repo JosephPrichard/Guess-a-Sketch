@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"guessasketch/store"
 	"log"
 	"time"
 )
@@ -43,7 +44,7 @@ func (broker *Broker) Start(code string, wordBank []string) {
 		broker.ResetState <- struct{}{}
 	}
 
-	room := NewRoom(code, wordBank, startResetTimer)
+	room := store.NewRoom(code, wordBank, startResetTimer)
 	subscribers := make(map[chan string]string)
 
 	// blocks this goroutine to listen to messages on each channel until told to stop
@@ -53,20 +54,20 @@ func (broker *Broker) Start(code string, wordBank []string) {
 			log.Printf("User subscribed to the broker")
 			// add the channel to the map, send the room state, and handle join in the room state
 			subscribers[subMsg.Subscriber] = subMsg.Player
-			room.HandleJoin(subMsg.Player)
+			room.Join(subMsg.Player)
 			subMsg.Subscriber <- room.Marshal()
 
 		case subscriber := <-broker.Unsubscribe:
 			log.Printf("User unsubscribed from the broker")
 			// handle join in the room state, delete the subscriber channel from the map and close it
 			player := subscribers[subscriber]
-			room.HandleLeave(player)
+			room.Leave(player)
 			delete(subscribers, subscriber)
 
 		case sentMsg := <-broker.SendMessage:
 			// handle the message and get a response, then handle the error case
 			player := subscribers[sentMsg.Sender]
-			resp, err := room.HandleMessage(sentMsg.Message, player)
+			resp, err := HandleMessage(room, sentMsg.Message, player)
 			if err != nil {
 				// only the sender should receieve the error response
 				SendErrMsg(sentMsg.Sender, err.Error())
@@ -79,7 +80,7 @@ func (broker *Broker) Start(code string, wordBank []string) {
 
 		case <-broker.ResetState:
 			// reset the game and get a response, then handle the error cose
-			resp, err := room.ResetGame()
+			resp, err := HandleReset(room)
 			if err != nil {
 				// if an error does exist, serialize it and replace the success message with it
 				errMsg := ErrorMsg{ErrorDesc: err.Error()}

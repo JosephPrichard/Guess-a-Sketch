@@ -2,34 +2,20 @@ package server
 
 import (
 	"encoding/json"
+	"guessasketch/store"
 	"log"
 	"net/http"
 )
 
-const MARSHAL_ERR_MSG = "Failed to unmarshal/mashall input data"
-
-type OptionsMsg struct {
-	playerLimit   int
-	timeLimitSecs int
-	wordBank      []string
-}
+type OptionsMsg = store.Options
 
 type TextMsg struct {
 	Text string
 }
 
-type DrawMsg struct {
-	X      uint16
-	Y      uint16
-	Color  uint8
-	Radius uint8
-}
+type DrawMsg = store.Circle
 
-type ChatMsg struct {
-	Player        string
-	Text          string
-	GuessScoreInc int `json:"scoreInc,omitempty"`
-}
+type ChatMsg = store.Chat
 
 type BeginMsg struct {
 	NextWord   string
@@ -37,7 +23,7 @@ type BeginMsg struct {
 }
 
 type FinishMsg struct {
-	*BeginMsg
+	BeginMsg      *BeginMsg
 	PrevPlayer    string
 	GuessScoreInc int
 }
