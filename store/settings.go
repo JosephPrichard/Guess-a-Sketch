@@ -23,7 +23,7 @@ func NewSettings() RoomSettings {
 	}
 }
 
-func (settings *RoomSettings) UpdateSettings(options *Options) {
+func (settings *RoomSettings) UpdateSettings(options Options) {
 	if options.PlayerLimit != 0 {
 		settings.playerLimit = options.PlayerLimit
 	}

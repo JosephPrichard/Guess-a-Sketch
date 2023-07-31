@@ -47,9 +47,9 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	broker := NewBroker()
+	broker := NewBroker(code, controller.gameWordBank)
 	log.Printf("Starting a broker for code %s", code)
-	go broker.Start(code, controller.gameWordBank)
+	go broker.Start()
 	controller.brokers.Store(code, broker)
 
 	roomCode := RoomCodeResp{Code: code}
@@ -75,6 +75,8 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 	}
 
 	ws, err := controller.upgrader.Upgrade(w, r, nil)
+	// close socket on cleanup
+	defer ws.Close()
 	if err != nil {
 		log.Println(err)
 	}
@@ -90,46 +92,52 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 	}
 
 	// create a new subscription channel and join the broker with it
-	ch := make(Subscriber)
-	broker.Subscribe <- SubscriberMsg{Subscriber: ch, Player: player}
+	subscriber := Subscriber{
+		Message:    make(chan string),
+		Disconnect: make(chan struct{}),
+	}
+	broker.Subscribe <- SubscriberMsg{Subscriber: subscriber, Player: player}
 
-	ws.SetCloseHandler(func(int, string) error {
-		broker.Unsubscribe <- ch
-		close(ch)
-		ws.Close()
+	ws.SetCloseHandler(func(code int, text string) error {
+		broker.Unsubscribe <- subscriber
+		close(subscriber.Message)
+		close(subscriber.Disconnect)
+		log.Printf("Client closed connection with code %d and message %s", code, text)
 		return nil
 	})
 
-	// create routines to read and write to broker
-	go socketWriter(ws, ch)
-	go socketReader(ws, broker, ch)
+	go socketWriter(ws, subscriber)
+	go socketReader(ws, broker, subscriber)
+
+	// wait and close connection if a disconnect signal is sent
+	<-subscriber.Disconnect
 }
 
 // reads messages from socket and sends them to the broker
-func socketReader(ws *websocket.Conn, broker *Broker, ch Subscriber) {
+func socketReader(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
+	// close socket on cleanup
+	defer ws.Close()
 	for {
 		_, p, err := ws.ReadMessage()
 		if err != nil {
-			log.Println(err)
+			// stop reading the socket on error, let close handler handle the error
 			return
 		}
-
 		// read any message from the socket and broadcast it to the broker
 		message := string(p)
-		broker.SendMessage <- SentMsg{Message: message, Sender: ch}
+		broker.SendMessage <- SentMsg{Message: message, Sender: subscriber}
 	}
 }
 
 // recv messages from a subscribed channel and with to the socket
-func socketWriter(ws *websocket.Conn, ch Subscriber) {
-	for {
+func socketWriter(ws *websocket.Conn, subscriber Subscriber) {
+	for resp := range subscriber.Message {
 		// read values from channel and write back to socket
-		resp := <-ch
-
 		err := ws.WriteMessage(websocket.TextMessage, []byte(resp))
 		if err != nil {
-			log.Println(err)
+			log.Printf("Error writing message %s", err)
 			return
 		}
 	}
+	log.Printf("Subscriber channel was closed")
 }

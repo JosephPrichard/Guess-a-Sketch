@@ -7,6 +7,20 @@ import (
 	"net/http"
 )
 
+const (
+	OptionsCode     = 0
+	StartCode       = 1
+	TextCode        = 2
+	DrawCode        = 3
+	ChatCode        = 4
+	FinishCode      = 5
+	BeginCode       = 6
+	JoinCode        = 7
+	LeaveCode       = 8
+	UnMarshalErrMsg = "Failed to unmarshal input data"
+	MarshallErrMsg  = "Failed to unmarshal input data"
+)
+
 type OptionsMsg = store.Options
 
 type TextMsg struct {
@@ -28,9 +42,25 @@ type FinishMsg struct {
 	GuessScoreInc int
 }
 
+type PlayerMsg struct {
+	// ensures ordering of players on client and server are the same
+	playerIndex int
+	player      string
+}
+
 type ErrorMsg struct {
 	Status    int
 	ErrorDesc string
+}
+
+type InputPayload struct {
+	Code int
+	Msg  json.RawMessage
+}
+
+type OutputPayload struct {
+	Code int
+	Msg  interface{}
 }
 
 func SendErrResp(w http.ResponseWriter, msg ErrorMsg) {

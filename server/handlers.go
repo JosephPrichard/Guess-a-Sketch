@@ -7,28 +7,6 @@ import (
 	"log"
 )
 
-const (
-	OptionsCode     = 0
-	StartCode       = 1
-	TextCode        = 2
-	DrawCode        = 3
-	ChatCode        = 4
-	FinishCode      = 5
-	BeginCode       = 6
-	UnMarshalErrMsg = "Failed to unmarshal input data"
-	MarshallErrMsg  = "Failed to unmarshal input data"
-)
-
-type InputPayload struct {
-	Code int
-	Msg  json.RawMessage
-}
-
-type OutputPayload struct {
-	Code int
-	Msg  interface{}
-}
-
 func HandleMessage(room *store.Room, message, player string) (string, error) {
 	// deserialize payload message from json
 	var payload InputPayload
@@ -44,7 +22,7 @@ func HandleMessage(room *store.Room, message, player string) (string, error) {
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		err = handleOptionsMessage(room, &inputMsg, player)
+		err = handleOptionsMessage(room, inputMsg, player)
 	case StartCode:
 		message, err = handleStartMessage(room, player)
 	case TextCode:
@@ -53,14 +31,14 @@ func HandleMessage(room *store.Room, message, player string) (string, error) {
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		message, err = handleTextMessage(room, &inputMsg, player)
+		message, err = handleTextMessage(room, inputMsg, player)
 	case DrawCode:
 		var inputMsg DrawMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		err = handleDrawMessage(room, &inputMsg, player)
+		err = handleDrawMessage(room, inputMsg, player)
 	default:
 		err = errors.New("No matching message types for message")
 	}
@@ -73,7 +51,7 @@ func HandleMessage(room *store.Room, message, player string) (string, error) {
 	return message, nil
 }
 
-func handleOptionsMessage(room *store.Room, msg *OptionsMsg, player string) error {
+func handleOptionsMessage(room *store.Room, msg OptionsMsg, player string) error {
 	if room.PlayerIsNotHost(player) {
 		return errors.New("Player must be the host to change the game options")
 	}
@@ -103,8 +81,10 @@ func handleStartMessage(room *store.Room, player string) (string, error) {
 	if room.Game != nil {
 		return "", errors.New("Cannot start a game that is already started")
 	}
+
 	room.Game = store.NewGame()
 	room.StartGame()
+
 	beginMsg := BeginMsg{
 		NextWord:   room.Game.CurrWord,
 		NextPlayer: room.GetCurrPlayer(),
@@ -117,7 +97,7 @@ func handleStartMessage(room *store.Room, player string) (string, error) {
 	return string(b), nil
 }
 
-func handleTextMessage(room *store.Room, msg *TextMsg, player string) (string, error) {
+func handleTextMessage(room *store.Room, msg TextMsg, player string) (string, error) {
 	text := msg.Text
 	if len(text) > 50 || len(text) < 5 {
 		return "", errors.New("Chat message must be less than 50 characters in length and more than 5")
@@ -140,7 +120,7 @@ func handleTextMessage(room *store.Room, msg *TextMsg, player string) (string, e
 	return string(b), nil
 }
 
-func handleDrawMessage(room *store.Room, msg *DrawMsg, player string) error {
+func handleDrawMessage(room *store.Room, msg DrawMsg, player string) error {
 	if room.Game == nil {
 		return errors.New("Can't draw on ganvas before game has started")
 	}
@@ -153,8 +133,44 @@ func handleDrawMessage(room *store.Room, msg *DrawMsg, player string) error {
 	if msg.Y > 800 || msg.X > 500 {
 		return errors.New("Circles must be drawn at the board between 0,0 and 800,500")
 	}
-	room.Game.DrawCircle(*msg)
+	room.Game.DrawCircle(msg)
 	return nil
+}
+
+func HandleJoin(room *store.Room, player string) (string, error) {
+	room.Join(player)
+
+	// broadcast the new player to all subscribers
+	lastIndex := len(room.Players) - 1
+	playerMsg := PlayerMsg{
+		playerIndex: lastIndex,
+		player: player,
+	}
+	payload := OutputPayload{Code: JoinCode, Msg: playerMsg}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func HandleLeave(room *store.Room, player string) (string, error) {
+	leaveIndex := room.Leave(player)
+	if leaveIndex < 0 {
+		return "", errors.New("Failed to leave the room, player couldn't be found")
+	}
+
+	// broadcast the leaving player to all subscribers
+	playerMsg := PlayerMsg{
+		playerIndex: leaveIndex,
+		player: player,
+	}
+	payload := OutputPayload{Code: LeaveCode, Msg: playerMsg}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func HandleReset(room *store.Room) (string, error) {

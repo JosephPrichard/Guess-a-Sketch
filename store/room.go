@@ -12,6 +12,8 @@ const (
 	After  = 2
 )
 
+type StartEvent = func(settings RoomSettings)
+
 type Chat struct {
 	Player        string
 	Text          string
@@ -19,28 +21,28 @@ type Chat struct {
 }
 
 type Room struct {
-	Code            string         // code of the room that uniquely identifies it
-	startResetTimer func(int)      // called whenever the game is reset, takes the time limit for a game as an arg
-	CurrRound       int            // the current round
-	Players         []string       // stores all players in the order they joined in
-	ScoreBoard      map[string]int // maps players to scores
-	Chat            []Chat         // stores the chat log
-	Stage           int            // the current stage the room is in
-	sharedWordBank  []string       // reference to the shared wordbank
-	Settings        RoomSettings   // settings for the room set before game starts
-	Game            *Game          // if the game state is nil, no game is being played
+	Code           string         // code of the room that uniquely identifies it
+	onStartGame    StartEvent     // called whenever the game is reset, takes the time limit for a game as an arg
+	CurrRound      int            // the current round
+	Players        []string       // stores all players in the order they joined in
+	ScoreBoard     map[string]int // maps players to scores
+	Chat           []Chat         // stores the chat log
+	Stage          int            // the current stage the room is in
+	sharedWordBank []string       // reference to the shared wordbank
+	Settings       RoomSettings   // settings for the room set before game starts
+	Game           *Game          // if the game state is nil, no game is being played
 }
 
-func NewRoom(code string, sharedWordBank []string, startResetTimer func(time int)) *Room {
+func NewRoom(code string, sharedWordBank []string, onStartGame StartEvent) *Room {
 	return &Room{
-		Code:            code,
-		startResetTimer: startResetTimer,
-		Players:         make([]string, 0),
-		ScoreBoard:      make(map[string]int),
-		Chat:            make([]Chat, 0),
-		Stage:           Before,
-		sharedWordBank:  sharedWordBank,
-		Settings:        NewSettings(),
+		Code:           code,
+		onStartGame:    onStartGame,
+		Players:        make([]string, 0),
+		ScoreBoard:     make(map[string]int),
+		Chat:           make([]Chat, 0),
+		Stage:          Before,
+		sharedWordBank: sharedWordBank,
+		Settings:       NewSettings(),
 	}
 }
 
@@ -72,7 +74,7 @@ func (room *Room) Join(player string) {
 	room.ScoreBoard[player] = 0
 }
 
-func (room *Room) Leave(playerToLeave string) {
+func (room *Room) Leave(playerToLeave string) int {
 	// find player in the slice
 	index := -1
 	for i, player := range room.Players {
@@ -83,12 +85,13 @@ func (room *Room) Leave(playerToLeave string) {
 	}
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
-		return
+		return -1
 	}
 	// delete player from the slice by creating a new slice without the index
 	room.Players = append(room.Players[:index], room.Players[index+1:]...)
 	// delete player from scoreboard
 	delete(room.ScoreBoard, playerToLeave)
+	return index
 }
 
 func (room *Room) StartGame() {
@@ -96,11 +99,12 @@ func (room *Room) StartGame() {
 
 	room.Game.ClearGuessers()
 	room.Game.ClearCanvas()
-	room.Game.ResetStartTime()
 
-	room.cycleCurrWord()
+	room.setNextWord()
 	room.cycleCurrPlayer()
-	go room.startResetTimer(room.Settings.TimeLimitSecs)
+
+	room.Game.ResetStartTime()
+	room.onStartGame(room.Settings)
 }
 
 func (room *Room) FinishGame() {
@@ -108,7 +112,7 @@ func (room *Room) FinishGame() {
 	room.Stage = After
 }
 
-func (room *Room) cycleCurrWord() {
+func (room *Room) setNextWord() {
 	// pick a new word from the shared or custom word bank
 	index := rand.Intn(len(room.sharedWordBank) + len(room.Settings.customWordBank))
 	if index < len(room.sharedWordBank) {
