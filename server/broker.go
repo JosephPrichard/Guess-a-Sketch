@@ -7,10 +7,7 @@ import (
 	"time"
 )
 
-type Subscriber struct {
-	Message    chan string
-	Disconnect chan struct{}
-}
+type Subscriber = chan string
 
 type SentMsg struct {
 	Message string
@@ -34,35 +31,37 @@ type Broker struct {
 
 func NewBroker(code string, wordBank []string) *Broker {
 	// create the broker with all channels and state
-	broker := &Broker{
+	return &Broker{
 		Subscribe:   make(chan SubscriberMsg),
 		Unsubscribe: make(chan Subscriber),
 		SendMessage: make(chan SentMsg),
 		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
 		subscribers: make(map[Subscriber]string),
+		room:        store.NewRoom(code, wordBank),
 	}
-	broker.room = store.NewRoom(code, wordBank, broker.onStartEvent)
-	return broker
 }
 
-func (broker *Broker) onStartEvent(settings store.RoomSettings) {
-	// whenever a game starts, the timer to reset the game after the input delay must be set
-	go func(timeSecs int) {
+func (broker *Broker) IsExpired(now time.Time) bool {
+	return now.Second() > int(broker.room.ExpireTime.Load())
+}
+
+func (broker *Broker) startResetTimer(timeSecs int) {
+	go func() {
 		time.Sleep(time.Duration(timeSecs) * time.Second)
 		broker.ResetState <- struct{}{}
-	}(settings.TimeLimitSecs)
+	}()
 }
 
 func (broker *Broker) broadcast(resp string) {
 	for s := range broker.subscribers {
-		s.Message <- resp
+		s <- resp
 	}
 }
 
 func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {
 	if !broker.room.CanJoin() {
-		subMsg.Subscriber.Disconnect <- struct{}{}
+		close(subMsg.Subscriber)
 		return
 	}
 	log.Printf("User subscribed to the broker")
@@ -70,13 +69,13 @@ func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {
 	resp, err := HandleJoin(broker.room, subMsg.Player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(subMsg.Subscriber.Message, err.Error())
+		SendErrMsg(subMsg.Subscriber, err.Error())
 		return
 	}
 	broker.subscribers[subMsg.Subscriber] = subMsg.Player
 
 	broker.broadcast(resp)
-	subMsg.Subscriber.Message <- broker.room.Marshal()
+	subMsg.Subscriber <- broker.room.Marshal()
 }
 
 func (broker *Broker) onUnsubscribe(subscriber Subscriber) {
@@ -86,21 +85,22 @@ func (broker *Broker) onUnsubscribe(subscriber Subscriber) {
 	resp, err := HandleLeave(broker.room, player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(subscriber.Message, err.Error())
+		SendErrMsg(subscriber, err.Error())
 		return
 	}
+	delete(broker.subscribers, subscriber)
+	close(subscriber)
 
 	broker.broadcast(resp)
-	delete(broker.subscribers, subscriber)
 }
 
 func (broker *Broker) onMessage(sentMsg SentMsg) {
 	// handle the message and get a response, then handle the error case
 	player := broker.subscribers[sentMsg.Sender]
-	resp, err := HandleMessage(broker.room, sentMsg.Message, player)
+	resp, err := HandleMessage(broker, sentMsg.Message, player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(sentMsg.Sender.Message, err.Error())
+		SendErrMsg(sentMsg.Sender, err.Error())
 		return
 	}
 	// broadcast a non error response to all subscribers
@@ -109,7 +109,7 @@ func (broker *Broker) onMessage(sentMsg SentMsg) {
 
 func (broker *Broker) onResetState() {
 	// reset the game and get a response, then handle the error cose
-	resp, err := HandleReset(broker.room)
+	resp, err := HandleReset(broker)
 	if err != nil {
 		// if an error does exist, serialize it and replace the success message with it
 		errMsg := ErrorMsg{ErrorDesc: err.Error()}
@@ -124,6 +124,13 @@ func (broker *Broker) onResetState() {
 	broker.broadcast(resp)
 }
 
+func (broker *Broker) onStop() {
+	for s := range broker.subscribers {
+		delete(broker.subscribers, s)
+		close(s)
+	}
+}
+
 func (broker *Broker) Start() {
 	for {
 		select {
@@ -136,6 +143,7 @@ func (broker *Broker) Start() {
 		case <-broker.ResetState:
 			broker.onResetState()
 		case <-broker.Stop:
+			broker.onStop()
 			return
 		}
 	}

@@ -3,13 +3,14 @@ package store
 import (
 	"encoding/json"
 	"math/rand"
+	"sync/atomic"
 	"time"
 )
 
 const (
-	Before = 0
-	During = 1
-	After  = 2
+	Lobby   = 0
+	Playing = 1
+	Post    = 2
 )
 
 type StartEvent = func(settings RoomSettings)
@@ -22,28 +23,33 @@ type Chat struct {
 
 type Room struct {
 	Code           string         // code of the room that uniquely identifies it
-	onStartGame    StartEvent     // called whenever the game is reset, takes the time limit for a game as an arg
 	CurrRound      int            // the current round
 	Players        []string       // stores all players in the order they joined in
 	ScoreBoard     map[string]int // maps players to scores
-	Chat           []Chat         // stores the chat log
-	Stage          int            // the current stage the room is in
+	ChatLog        []Chat         // stores the chat log
+	Stage          int            // the current stage the room is (upports concurrent operations)
 	sharedWordBank []string       // reference to the shared wordbank
 	Settings       RoomSettings   // settings for the room set before game starts
 	Game           *Game          // if the game state is nil, no game is being played
+	ExpireTime     atomic.Int64   // last access of the game
 }
 
-func NewRoom(code string, sharedWordBank []string, onStartGame StartEvent) *Room {
-	return &Room{
+func NewRoom(code string, sharedWordBank []string) *Room {
+	room := &Room{
 		Code:           code,
-		onStartGame:    onStartGame,
 		Players:        make([]string, 0),
 		ScoreBoard:     make(map[string]int),
-		Chat:           make([]Chat, 0),
-		Stage:          Before,
+		ChatLog:        make([]Chat, 0),
 		sharedWordBank: sharedWordBank,
 		Settings:       NewSettings(),
 	}
+	room.PostponeExpiration()
+	return room
+}
+
+func (room *Room) PostponeExpiration() {
+	// set the expiration time for 15 minutes
+	room.ExpireTime.Store(time.Now().Unix() + 15*60)
 }
 
 func (room *Room) GetCurrPlayer() string {
@@ -94,8 +100,9 @@ func (room *Room) Leave(playerToLeave string) int {
 	return index
 }
 
-func (room *Room) StartGame() {
-	room.Stage = During
+// starts the game and returns a snapshot of the settings used to start the game
+func (room *Room) StartGame() RoomSettings {
+	room.Stage = Playing
 
 	room.Game.ClearGuessers()
 	room.Game.ClearCanvas()
@@ -104,12 +111,12 @@ func (room *Room) StartGame() {
 	room.cycleCurrPlayer()
 
 	room.Game.ResetStartTime()
-	room.onStartGame(room.Settings)
+	return room.Settings
 }
 
 func (room *Room) FinishGame() {
 	room.Game = nil
-	room.Stage = After
+	room.Stage = Post
 }
 
 func (room *Room) setNextWord() {
@@ -153,5 +160,5 @@ func (room *Room) OnResetScoreInc() int {
 }
 
 func (room *Room) AddChat(chat Chat) {
-	room.Chat = append(room.Chat, chat)
+	room.ChatLog = append(room.ChatLog, chat)
 }

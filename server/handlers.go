@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-func HandleMessage(room *store.Room, message, player string) (string, error) {
+func HandleMessage(broker *Broker, message, player string) (string, error) {
 	// deserialize payload message from json
 	var payload InputPayload
 	err := json.Unmarshal([]byte(message), &payload)
@@ -22,59 +22,60 @@ func HandleMessage(room *store.Room, message, player string) (string, error) {
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		err = handleOptionsMessage(room, inputMsg, player)
+		return handleOptionsMessage(broker.room, inputMsg, player)
 	case StartCode:
-		message, err = handleStartMessage(room, player)
+		return handleStartMessage(broker, player)
 	case TextCode:
 		var inputMsg TextMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		message, err = handleTextMessage(room, inputMsg, player)
+		return handleTextMessage(broker.room, inputMsg, player)
 	case DrawCode:
 		var inputMsg DrawMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return "", errors.New(UnMarshalErrMsg)
 		}
-		err = handleDrawMessage(room, inputMsg, player)
+		return handleDrawMessage(broker.room, inputMsg, player)
 	default:
-		err = errors.New("No matching message types for message")
+		return "", errors.New("No matching message types for message")
 	}
-
-	if err != nil {
-		return "", err
-	}
-
-	// sends back the input message back for all cases
-	return message, nil
 }
 
-func handleOptionsMessage(room *store.Room, msg OptionsMsg, player string) error {
+func handleOptionsMessage(room *store.Room, msg OptionsMsg, player string) (string, error) {
 	if room.PlayerIsNotHost(player) {
-		return errors.New("Player must be the host to change the game options")
+		return "", errors.New("Player must be the host to change the game options")
 	}
 	if room.Game != nil {
-		return errors.New("Cannot modify options for a game already in session")
+		return "", errors.New("Cannot modify options for a game already in session")
 	}
 	if len(msg.WordBank) < 10 && len(msg.WordBank) != 0 {
-		return errors.New("Word bank must have at least 10 words")
+		return "", errors.New("Word bank must have at least 10 words")
 	}
 	if (msg.TimeLimitSecs < 15 || msg.TimeLimitSecs > 240) && msg.TimeLimitSecs != 0 {
-		return errors.New("Time limit must be between 15 and 240 seconds")
+		return "", errors.New("Time limit must be between 15 and 240 seconds")
 	}
 	if (msg.PlayerLimit < 2 || msg.PlayerLimit > 12) && msg.PlayerLimit != 0 {
-		return errors.New("Games can only contain between 2 and 12 players")
+		return "", errors.New("Games can only contain between 2 and 12 players")
 	}
 	if msg.PlayerLimit < len(room.Players) && msg.PlayerLimit != 0 {
-		return errors.New("Cannot reduce player limit lower than number of players currently in the room")
+		return "", errors.New("Cannot reduce player limit lower than number of players currently in the room")
 	}
 	room.Settings.UpdateSettings(msg)
-	return nil
+
+	payload := OutputPayload{Code: OptionsCode, Msg: msg}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", errors.New(MarshallErrMsg)
+	}
+	return string(b), nil
 }
 
-func handleStartMessage(room *store.Room, player string) (string, error) {
+func handleStartMessage(broker *Broker, player string) (string, error) {
+	room := broker.room
+
 	if room.PlayerIsNotHost(player) {
 		return "", errors.New("Player must be the host to start the game")
 	}
@@ -83,7 +84,9 @@ func handleStartMessage(room *store.Room, player string) (string, error) {
 	}
 
 	room.Game = store.NewGame()
-	room.StartGame()
+	settings := room.StartGame()
+	broker.startResetTimer(settings.TimeLimitSecs)
+	room.PostponeExpiration()
 
 	beginMsg := BeginMsg{
 		NextWord:   room.Game.CurrWord,
@@ -120,21 +123,27 @@ func handleTextMessage(room *store.Room, msg TextMsg, player string) (string, er
 	return string(b), nil
 }
 
-func handleDrawMessage(room *store.Room, msg DrawMsg, player string) error {
+func handleDrawMessage(room *store.Room, msg DrawMsg, player string) (string, error) {
 	if room.Game == nil {
-		return errors.New("Can't draw on ganvas before game has started")
+		return "", errors.New("Can't draw on ganvas before game has started")
 	}
 	if player != room.GetCurrPlayer() {
-		return errors.New("Player cannot draw on the canvas")
+		return "", errors.New("Player cannot draw on the canvas")
 	}
 	if msg.Color > 8 || msg.Radius > 8 {
-		return errors.New("Color and radius enums must be between 0 and 8")
+		return "", errors.New("Color and radius enums must be between 0 and 8")
 	}
 	if msg.Y > 800 || msg.X > 500 {
-		return errors.New("Circles must be drawn at the board between 0,0 and 800,500")
+		return "", errors.New("Circles must be drawn at the board between 0,0 and 800,500")
 	}
 	room.Game.DrawCircle(msg)
-	return nil
+
+	payload := OutputPayload{Code: DrawCode, Msg: msg}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", errors.New(MarshallErrMsg)
+	}
+	return string(b), nil
 }
 
 func HandleJoin(room *store.Room, player string) (string, error) {
@@ -144,7 +153,7 @@ func HandleJoin(room *store.Room, player string) (string, error) {
 	lastIndex := len(room.Players) - 1
 	playerMsg := PlayerMsg{
 		playerIndex: lastIndex,
-		player: player,
+		player:      player,
 	}
 	payload := OutputPayload{Code: JoinCode, Msg: playerMsg}
 	b, err := json.Marshal(payload)
@@ -163,7 +172,7 @@ func HandleLeave(room *store.Room, player string) (string, error) {
 	// broadcast the leaving player to all subscribers
 	playerMsg := PlayerMsg{
 		playerIndex: leaveIndex,
-		player: player,
+		player:      player,
 	}
 	payload := OutputPayload{Code: LeaveCode, Msg: playerMsg}
 	b, err := json.Marshal(payload)
@@ -173,7 +182,8 @@ func HandleLeave(room *store.Room, player string) (string, error) {
 	return string(b), nil
 }
 
-func HandleReset(room *store.Room) (string, error) {
+func HandleReset(broker *Broker) (string, error) {
+	room := broker.room
 	log.Printf("Resetting the game for code %s", room.Code)
 
 	prevPlayer := room.GetCurrPlayer()
@@ -181,7 +191,8 @@ func HandleReset(room *store.Room) (string, error) {
 
 	var beginMsg *BeginMsg = nil
 	if room.CurrRound < room.Settings.TotalRounds {
-		room.StartGame()
+		settings := room.StartGame()
+		broker.startResetTimer(settings.TimeLimitSecs)
 
 		beginMsg = &BeginMsg{
 			NextWord:   room.Game.CurrWord,
@@ -190,6 +201,7 @@ func HandleReset(room *store.Room) (string, error) {
 	} else {
 		room.FinishGame()
 	}
+	room.PostponeExpiration()
 
 	finishMsg := FinishMsg{
 		BeginMsg:      beginMsg,

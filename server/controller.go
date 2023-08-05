@@ -6,19 +6,19 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-type WsController struct {
-	upgrader     websocket.Upgrader
-	brokers      sync.Map
-	gameWordBank []string
-}
-
 type RoomCodeResp struct {
 	Code string
+}
+
+type WsController struct {
+	upgrader     websocket.Upgrader
+	brokerMap    *BrokerMap
+	gameWordBank []string
 }
 
 func NewWsController(gameWordBank []string) *WsController {
@@ -27,20 +27,38 @@ func NewWsController(gameWordBank []string) *WsController {
 		WriteBufferSize: 1024,
 	}
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	return &WsController{upgrader: upgrader, gameWordBank: gameWordBank}
+	return &WsController{
+		upgrader:     upgrader,
+		brokerMap:    NewBrokerMap(time.Minute),
+		gameWordBank: gameWordBank,
+	}
 }
 
-func generateCode(length int) (string, error) {
-	b := make([]byte, length)
+func generateCode(len int) (string, error) {
+	b := make([]byte, len/2)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
 }
 
+func (controller *WsController) GetRandomCode(w http.ResponseWriter, r *http.Request) {
+	code := controller.brokerMap.RandomCode()
+
+	roomCode := RoomCodeResp{Code: code}
+	b, err := json.Marshal(roomCode)
+	if err != nil {
+		log.Printf("Failed to serialize random room code response")
+		return
+	}
+
+	w.WriteHeader(200)
+	w.Write(b)
+}
+
 func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	// generate a code, create a broker, start it, then store it in the map
-	code, err := generateCode(4)
+	code, err := generateCode(8)
 	if err != nil {
 		resp := ErrorMsg{Status: 500, ErrorDesc: "Failed to generate a valid error code"}
 		SendErrResp(w, resp)
@@ -50,12 +68,12 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 	broker := NewBroker(code, controller.gameWordBank)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
-	controller.brokers.Store(code, broker)
+	controller.brokerMap.Store(code, broker)
 
 	roomCode := RoomCodeResp{Code: code}
 	b, err := json.Marshal(roomCode)
 	if err != nil {
-		log.Printf("Failed to serialize room code response")
+		log.Printf("Failed to serialize create room code response")
 		return
 	}
 
@@ -74,53 +92,38 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ws, err := controller.upgrader.Upgrade(w, r, nil)
-	// close socket on cleanup
-	defer ws.Close()
-	if err != nil {
-		log.Println(err)
-	}
-
-	var broker *Broker
-	v, ok := controller.brokers.Load(code)
-	if ok {
-		broker = v.(*Broker)
-	} else {
+	broker := controller.brokerMap.Load(code)
+	if broker == nil {
 		resp := ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
 		SendErrResp(w, resp)
 		return
 	}
 
-	// create a new subscription channel and join the broker with it
-	subscriber := Subscriber{
-		Message:    make(chan string),
-		Disconnect: make(chan struct{}),
+	ws, err := controller.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
 	}
+
+	// create a new subscription channel and join the broker with it
+	subscriber := make(chan string)
 	broker.Subscribe <- SubscriberMsg{Subscriber: subscriber, Player: player}
 
-	ws.SetCloseHandler(func(code int, text string) error {
-		broker.Unsubscribe <- subscriber
-		close(subscriber.Message)
-		close(subscriber.Disconnect)
-		log.Printf("Client closed connection with code %d and message %s", code, text)
-		return nil
-	})
-
-	go socketWriter(ws, subscriber)
-	go socketReader(ws, broker, subscriber)
-
-	// wait and close connection if a disconnect signal is sent
-	<-subscriber.Disconnect
+	go subscriberListener(ws, subscriber)
+	go socketListener(ws, broker, subscriber)
 }
 
-// reads messages from socket and sends them to the broker
-func socketReader(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
-	// close socket on cleanup
-	defer ws.Close()
+// reads messages from socket and sends them to broker
+func socketListener(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
+	defer func() {
+		broker.Unsubscribe <- subscriber
+		ws.Close()
+		log.Printf("Socket listener close function called")
+	}()
 	for {
 		_, p, err := ws.ReadMessage()
 		if err != nil {
-			// stop reading the socket on error, let close handler handle the error
+			log.Printf("Client closed connection with err %s", err.Error())
 			return
 		}
 		// read any message from the socket and broadcast it to the broker
@@ -129,9 +132,13 @@ func socketReader(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
 	}
 }
 
-// recv messages from a subscribed channel and with to the socket
-func socketWriter(ws *websocket.Conn, subscriber Subscriber) {
-	for resp := range subscriber.Message {
+// reads messages from a subscribed channel and sends them to socket
+func subscriberListener(ws *websocket.Conn, subscriber Subscriber) {
+	defer func() {
+		ws.Close()
+		log.Printf("Subscriber channel was closed")
+	}()
+	for resp := range subscriber {
 		// read values from channel and write back to socket
 		err := ws.WriteMessage(websocket.TextMessage, []byte(resp))
 		if err != nil {
@@ -139,5 +146,4 @@ func socketWriter(ws *websocket.Conn, subscriber Subscriber) {
 			return
 		}
 	}
-	log.Printf("Subscriber channel was closed")
 }
