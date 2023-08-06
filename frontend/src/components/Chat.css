@@ -1,0 +1,25 @@
+.Chat {
+    width: 400px;
+    height: 100%;
+    background-color: rgb(240,240,240);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.ChatInput {
+    font-size: 15px;
+    height: 28px;
+    border-radius: 3px;
+    bottom: 0;
+}
+
+.ChatPlayer {
+    font-weight: bold;
+}
+
+.ChatMsg {
+    line-height: 35px;
+    display: block;
+    text-align: left;
+    margin-left: 3px;
+}

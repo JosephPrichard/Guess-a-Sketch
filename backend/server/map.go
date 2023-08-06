@@ -7,7 +7,7 @@ import (
 )
 
 type BrokerMap struct {
-	m      sync.Map
+	m sync.Map
 }
 
 func NewBrokerMap(period time.Duration) *BrokerMap {

@@ -17,8 +17,6 @@ const (
 	BeginCode       = 6
 	JoinCode        = 7
 	LeaveCode       = 8
-	UnMarshalErrMsg = "Failed to unmarshal input data"
-	MarshallErrMsg  = "Failed to unmarshal input data"
 )
 
 type OptionsMsg = store.Options
@@ -73,12 +71,12 @@ func SendErrResp(w http.ResponseWriter, msg ErrorMsg) {
 	w.Write(b)
 }
 
-func SendErrMsg(ch chan string, errorDesc string) {
+func SendErrMsg(ch chan []byte, errorDesc string) {
 	msg := ErrorMsg{ErrorDesc: errorDesc}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("Failed to serialize error for ws message")
 		return
 	}
-	ch <- string(b)
+	ch <- b
 }

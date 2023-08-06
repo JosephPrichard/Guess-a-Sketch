@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"guessasketch/store"
 	"log"
+	"sync/atomic"
 	"time"
 )
 
-type Subscriber = chan string
+type Subscriber = chan []byte
 
 type SentMsg struct {
-	Message string
+	Message []byte
 	Sender  Subscriber
 }
 
@@ -25,13 +26,14 @@ type Broker struct {
 	SendMessage chan SentMsg
 	ResetState  chan struct{}
 	Stop        chan struct{}
-	room        *store.Room
+	room        store.Room
 	subscribers map[Subscriber]string
+	ExpireTime  atomic.Int64
 }
 
 func NewBroker(code string, wordBank []string) *Broker {
 	// create the broker with all channels and state
-	return &Broker{
+	broker := &Broker{
 		Subscribe:   make(chan SubscriberMsg),
 		Unsubscribe: make(chan Subscriber),
 		SendMessage: make(chan SentMsg),
@@ -40,54 +42,58 @@ func NewBroker(code string, wordBank []string) *Broker {
 		subscribers: make(map[Subscriber]string),
 		room:        store.NewRoom(code, wordBank),
 	}
+	broker.PostponeExpiration()
+	return broker
+}
+
+func (room *Broker) PostponeExpiration() {
+	// set the expiration time for 15 minutes
+	room.ExpireTime.Store(time.Now().Unix() + 15*60)
 }
 
 func (broker *Broker) IsExpired(now time.Time) bool {
-	return now.Second() > int(broker.room.ExpireTime.Load())
+	return now.Unix() > broker.ExpireTime.Load()
 }
 
-func (broker *Broker) startResetTimer(timeSecs int) {
+func (broker *Broker) StartResetTimer(timeSecs int) {
 	go func() {
 		time.Sleep(time.Duration(timeSecs) * time.Second)
 		broker.ResetState <- struct{}{}
 	}()
 }
 
-func (broker *Broker) broadcast(resp string) {
+func (broker *Broker) broadcast(resp []byte) {
 	for s := range broker.subscribers {
 		s <- resp
 	}
 }
 
 func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {
-	if !broker.room.CanJoin() {
+	resp, err := HandleJoin(&broker.room, subMsg.Player)
+	if err != nil {
+		// only the sender should receieve the error response
+		SendErrMsg(subMsg.Subscriber, err.Error())
 		close(subMsg.Subscriber)
 		return
 	}
 	log.Printf("User subscribed to the broker")
 
-	resp, err := HandleJoin(broker.room, subMsg.Player)
-	if err != nil {
-		// only the sender should receieve the error response
-		SendErrMsg(subMsg.Subscriber, err.Error())
-		return
-	}
 	broker.subscribers[subMsg.Subscriber] = subMsg.Player
 
 	broker.broadcast(resp)
-	subMsg.Subscriber <- broker.room.Marshal()
+	subMsg.Subscriber <- broker.room.ToMessage()
 }
 
 func (broker *Broker) onUnsubscribe(subscriber Subscriber) {
-	log.Printf("User unsubscribed from the broker")
-
 	player := broker.subscribers[subscriber]
-	resp, err := HandleLeave(broker.room, player)
+	resp, err := HandleLeave(&broker.room, player)
 	if err != nil {
 		// only the sender should receieve the error response
 		SendErrMsg(subscriber, err.Error())
 		return
 	}
+	log.Printf("User unsubscribed from the broker")
+
 	delete(broker.subscribers, subscriber)
 	close(subscriber)
 
@@ -118,7 +124,7 @@ func (broker *Broker) onResetState() {
 			log.Printf("Failed to serialize error for ws message")
 			return
 		}
-		resp = string(b)
+		resp = b
 	}
 	// broadcast the response to all subscribers - error or not
 	broker.broadcast(resp)

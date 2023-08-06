@@ -30,6 +30,5 @@ func main() {
 
 	http.HandleFunc("/rooms/create", wsController.CreateRoom)
 	http.HandleFunc("/rooms/join", wsController.JoinRoom)
-	http.HandleFunc("/rooms/random", wsController.GetRandomCode)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

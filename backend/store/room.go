@@ -2,8 +2,8 @@ package store
 
 import (
 	"encoding/json"
+	"log"
 	"math/rand"
-	"sync/atomic"
 	"time"
 )
 
@@ -12,8 +12,6 @@ const (
 	Playing = 1
 	Post    = 2
 )
-
-type StartEvent = func(settings RoomSettings)
 
 type Chat struct {
 	Player        string
@@ -31,11 +29,10 @@ type Room struct {
 	sharedWordBank []string       // reference to the shared wordbank
 	Settings       RoomSettings   // settings for the room set before game starts
 	Game           *Game          // if the game state is nil, no game is being played
-	ExpireTime     atomic.Int64   // last access of the game
 }
 
-func NewRoom(code string, sharedWordBank []string) *Room {
-	room := &Room{
+func NewRoom(code string, sharedWordBank []string) Room {
+	return Room{
 		Code:           code,
 		Players:        make([]string, 0),
 		ScoreBoard:     make(map[string]int),
@@ -43,13 +40,6 @@ func NewRoom(code string, sharedWordBank []string) *Room {
 		sharedWordBank: sharedWordBank,
 		Settings:       NewSettings(),
 	}
-	room.PostponeExpiration()
-	return room
-}
-
-func (room *Room) PostponeExpiration() {
-	// set the expiration time for 15 minutes
-	room.ExpireTime.Store(time.Now().Unix() + 15*60)
 }
 
 func (room *Room) GetCurrPlayer() string {
@@ -63,16 +53,29 @@ func (room *Room) PlayerIsNotHost(player string) bool {
 	return len(room.Players) < 1 || room.Players[0] != player
 }
 
-func (room *Room) Marshal() string {
+func (room *Room) ToMessage() []byte {
 	b, err := json.Marshal(room)
 	if err != nil {
-		return "Failed to marshall room data"
+		log.Printf(err.Error())
+		return []byte{}
 	}
-	return string(b)
+	return b
 }
 
-func (room *Room) CanJoin() bool {
-	return len(room.Players) < room.Settings.playerLimit-1
+func (room *Room) CanJoin(player string) bool {
+	return len(room.Players) < room.Settings.playerLimit-1 && room.PlayerIndex(player) < 0
+}
+
+func (room *Room) PlayerIndex(playerToFind string) int {
+	// find player in the slice
+	index := -1
+	for i, player := range room.Players {
+		if player == playerToFind {
+			index = i
+			break
+		}
+	}
+	return index
 }
 
 func (room *Room) Join(player string) {
@@ -81,14 +84,7 @@ func (room *Room) Join(player string) {
 }
 
 func (room *Room) Leave(playerToLeave string) int {
-	// find player in the slice
-	index := -1
-	for i, player := range room.Players {
-		if player == playerToLeave {
-			index = i
-			break
-		}
-	}
+	index := room.PlayerIndex(playerToLeave)
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
 		return -1

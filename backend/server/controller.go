@@ -42,20 +42,6 @@ func generateCode(len int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func (controller *WsController) GetRandomCode(w http.ResponseWriter, r *http.Request) {
-	code := controller.brokerMap.RandomCode()
-
-	roomCode := RoomCodeResp{Code: code}
-	b, err := json.Marshal(roomCode)
-	if err != nil {
-		log.Printf("Failed to serialize random room code response")
-		return
-	}
-
-	w.WriteHeader(200)
-	w.Write(b)
-}
-
 func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	// generate a code, create a broker, start it, then store it in the map
 	code, err := generateCode(8)
@@ -106,7 +92,7 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 	}
 
 	// create a new subscription channel and join the broker with it
-	subscriber := make(chan string)
+	subscriber := make(Subscriber)
 	broker.Subscribe <- SubscriberMsg{Subscriber: subscriber, Player: player}
 
 	go subscriberListener(ws, subscriber)
@@ -127,8 +113,7 @@ func socketListener(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
 			return
 		}
 		// read any message from the socket and broadcast it to the broker
-		message := string(p)
-		broker.SendMessage <- SentMsg{Message: message, Sender: subscriber}
+		broker.SendMessage <- SentMsg{Message: p, Sender: subscriber}
 	}
 }
 
@@ -140,7 +125,7 @@ func subscriberListener(ws *websocket.Conn, subscriber Subscriber) {
 	}()
 	for resp := range subscriber {
 		// read values from channel and write back to socket
-		err := ws.WriteMessage(websocket.TextMessage, []byte(resp))
+		err := ws.WriteMessage(websocket.TextMessage, resp)
 		if err != nil {
 			log.Printf("Error writing message %s", err)
 			return

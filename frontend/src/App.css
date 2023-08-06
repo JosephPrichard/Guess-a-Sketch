@@ -1,0 +1,66 @@
+.App {
+  text-align: center;
+}
+
+.Input {
+  display: block;
+  height: 40px;
+  width: calc(100% - 25px);
+  font-size: 18px;
+  margin: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+  outline: none;
+  border-radius: 6px;
+  border: solid rgb(20,20,20) 1px;
+}
+
+.Button {
+  color: white;
+  border-radius: 5px;
+  font-size: 17px;
+  border: 0;
+  height: 40px;
+  width: 100%;
+  display: block;
+
+  background-color: #405cf5;
+  border: 1px solid transparent;
+  border-radius: .25rem;
+  box-shadow: rgba(0, 0, 0, 0.02) 0 1px 3px 0;
+  box-sizing: border-box;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: system-ui,-apple-system,system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.25;
+  min-height: 3rem;
+  padding: calc(.875rem - 1px) calc(1.5rem - 1px);
+  text-decoration: none;
+  transition: all 250ms;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.Button:hover,
+.Button:focus {
+  background-color: #405cf5;
+  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px;
+}
+
+.Button:hover {
+  transform: translateY(-1px);
+}
+
+.Button:active {
+  background-color: #374ecf;
+  box-shadow: rgba(0, 0, 0, .06) 0 2px 4px;
+  transform: translateY(0);
+}
+
+.Space {
+  margin-bottom: 10px;
+}
