@@ -1,0 +1,16 @@
+.TopBar {
+    background-color: rgb(235,235,235);
+    border-radius: 2px;
+    padding: 10px;
+    height: 45px;
+    width: calc(100% - 20px);
+    margin-bottom: 10px;
+    line-height: 45px;
+    font-weight: bold;
+    font-size: 22px;
+}
+
+.TopBarLeft {
+    float: left;
+    width: 45px;
+}

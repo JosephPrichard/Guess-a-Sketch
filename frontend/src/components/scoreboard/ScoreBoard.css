@@ -1,0 +1,20 @@
+.ScoreBoard {
+    width: 250px;
+    height: 430px;
+    background-color: rgb(235,235,235);
+    border-radius: 2px;
+    padding: 10px;
+}
+
+.Score {
+    display: flex;
+    font-weight: 500px;
+    font-size: 18px;
+    line-height: 25px;
+    padding: 2px 15px;
+}
+
+.ScorePiece {
+    text-align: left;
+    width: 50%;
+}

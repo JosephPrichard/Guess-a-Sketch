@@ -1,0 +1,14 @@
+.Base {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 30px;
+}
+
+.Wrapper {
+    display: flex;
+}
+
+.BoldText {
+    font-weight: bold;
+}

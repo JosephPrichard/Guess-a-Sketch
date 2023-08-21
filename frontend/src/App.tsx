@@ -1,7 +1,7 @@
 import './App.css';
 import { Router, Route, Routes } from '@solidjs/router';
-import Home from './pages/Home';
-import Room from './pages/Room';
+import Home from './pages/home/Home';
+import Room from './pages/room/Room';
 
 const App = () => {
   return (

@@ -1,20 +1,18 @@
 .Chat {
-    width: 400px;
-    height: 100%;
-    background-color: rgb(240,240,240);
-    border-radius: 4px;
+    width: 250px;
+    height: 430px;
+    background-color: rgb(235,235,235);
+    border-radius: 2px;
     padding: 10px;
+    display: grid;
+    grid-template-rows: auto 1fr;
 }
 
 .ChatInput {
     font-size: 15px;
     height: 28px;
     border-radius: 3px;
-    bottom: 0;
-}
-
-.ChatPlayer {
-    font-weight: bold;
+    align-self: end;
 }
 
 .ChatMsg {

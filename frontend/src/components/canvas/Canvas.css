@@ -1,0 +1,34 @@
+.Canvas {
+    width: 700px;
+    height: 450px;
+    border-radius: 2px;
+    margin-left: 15px;
+    margin-right: 15px;
+}
+
+.Paint {
+    margin-left: 15px;
+    margin-right: 15px;
+}
+
+.LargeTile {
+    display: inline-block;
+    width: 55px;
+    height: 55px;
+    text-align: left;
+    background-color: white;
+    margin-left: 2px;
+    margin-right: 2px;
+    cursor: pointer;
+}
+
+.SmallTile {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    text-align: right;
+    margin-left: 2px;
+    margin-right: 2px;
+    cursor: pointer;
+    border: black solid 1px;
+}

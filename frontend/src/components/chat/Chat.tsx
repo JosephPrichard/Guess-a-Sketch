@@ -10,17 +10,15 @@ export interface ChatMsg {
 
 const Chat = () => {
     const [newChat, setNewChat] = createSignal("");
-    const [chats, setChats] = createStore<ChatMsg[]>([
-        { text: "123", player: "123", guessIncScore: 0},
-        { text: "456", player: "123", guessIncScore: 0},
-        { text: "789", player: "123", guessIncScore: 0}
-    ]);
+    const [chats, setChats] = createStore<ChatMsg[]>([]);
 
     return (
         <div class="Chat">
-            <For each={chats}>
-                {(chat) => <ChatMsg {...chat}/>}
-            </For>
+            <div>
+                <For each={chats}>
+                    {(chat) => <ChatMsg {...chat}/>}
+                </For>
+            </div>
             <div class="Space"/>
             <input
                 placeholder="Type your guess here"
@@ -35,8 +33,11 @@ const Chat = () => {
 const ChatMsg = (chat: ChatMsg) => {
     return (
         <div class="ChatMsg">
-            <span class="ChatPlayer">
+            <span class="BoldText">
                 {chat.player}:
+            </span>
+            <span>
+                {" "}
             </span>
             <span>
                 {chat.text}

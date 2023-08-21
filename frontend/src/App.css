@@ -32,8 +32,9 @@
   color: #fff;
   cursor: pointer;
   display: inline-flex;
-  font-family: system-ui,-apple-system,system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-family: 'Schoolbell', arial, serif; 
   font-weight: 600;
+  font-size: 20px;
   justify-content: center;
   line-height: 1.25;
   min-height: 3rem;
@@ -63,4 +64,13 @@
 
 .Space {
   margin-bottom: 10px;
+}
+
+.NoLink {
+  text-decoration: none;
+  color: inherit;
+}
+
+.Darker {
+  background-color: rgb(200, 200, 200);
 }
