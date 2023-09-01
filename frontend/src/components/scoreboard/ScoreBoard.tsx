@@ -1,15 +1,10 @@
 import { For } from "solid-js";
 import "./ScoreBoard.css";
 import { createStore } from "solid-js/store";
+import { RoomProps } from "../../pages/room/Room";
 
-interface Score {
-    player: string;
-    points: number;
-}
-
-
-const ScoreBoard = () => {
-    const [scoreBoard, setScoreBoard] = createStore<Score[]>([]);
+const ScoreBoard = ({ room }: RoomProps) => {
+    const [scoreBoard, setScoreBoard] = createStore<ScoreProps[]>([]);
 
     return (
         <div class="ScoreBoard">
@@ -20,7 +15,12 @@ const ScoreBoard = () => {
     );
 }
 
-const Score = (score: Score) => {
+interface ScoreProps {
+    player: string;
+    points: number;
+}
+
+const Score = (score: ScoreProps) => {
     return (
         <div class="Score">
             <span class="BoldText ScorePiece">

@@ -8,15 +8,15 @@ import (
 )
 
 const (
-	OptionsCode     = 0
-	StartCode       = 1
-	TextCode        = 2
-	DrawCode        = 3
-	ChatCode        = 4
-	FinishCode      = 5
-	BeginCode       = 6
-	JoinCode        = 7
-	LeaveCode       = 8
+	OptionsCode = 0
+	StartCode   = 1
+	TextCode    = 2
+	DrawCode    = 3
+	ChatCode    = 4
+	FinishCode  = 5
+	BeginCode   = 6
+	JoinCode    = 7
+	LeaveCode   = 8
 )
 
 type OptionsMsg = store.Options
@@ -25,7 +25,7 @@ type TextMsg struct {
 	Text string
 }
 
-type DrawMsg = store.Circle
+type DrawMsg = store.Stroke
 
 type ChatMsg = store.Chat
 
@@ -42,8 +42,8 @@ type FinishMsg struct {
 
 type PlayerMsg struct {
 	// ensures ordering of players on client and server are the same
-	playerIndex int
-	player      string
+	PlayerIndex int
+	Player      string
 }
 
 type ErrorMsg struct {

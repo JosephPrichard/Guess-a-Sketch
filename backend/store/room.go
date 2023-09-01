@@ -28,7 +28,7 @@ type Room struct {
 	Stage          int            // the current stage the room is (upports concurrent operations)
 	sharedWordBank []string       // reference to the shared wordbank
 	Settings       RoomSettings   // settings for the room set before game starts
-	Game           *Game          // if the game state is nil, no game is being played
+	Game           Game           // if the game state is nil, no game is being played
 }
 
 func NewRoom(code string, sharedWordBank []string) Room {
@@ -39,6 +39,7 @@ func NewRoom(code string, sharedWordBank []string) Room {
 		ChatLog:        make([]Chat, 0),
 		sharedWordBank: sharedWordBank,
 		Settings:       NewSettings(),
+		Game:           NewGame(),
 	}
 }
 
@@ -63,7 +64,8 @@ func (room *Room) ToMessage() []byte {
 }
 
 func (room *Room) CanJoin(player string) bool {
-	return len(room.Players) < room.Settings.playerLimit-1 && room.PlayerIndex(player) < 0
+	_, exists := room.ScoreBoard[player]
+	return !exists
 }
 
 func (room *Room) PlayerIndex(playerToFind string) int {
@@ -91,13 +93,11 @@ func (room *Room) Leave(playerToLeave string) int {
 	}
 	// delete player from the slice by creating a new slice without the index
 	room.Players = append(room.Players[:index], room.Players[index+1:]...)
-	// delete player from scoreboard
-	delete(room.ScoreBoard, playerToLeave)
 	return index
 }
 
 // starts the game and returns a snapshot of the settings used to start the game
-func (room *Room) StartGame() RoomSettings {
+func (room *Room) StartGame() error {
 	room.Stage = Playing
 
 	room.Game.ClearGuessers()
@@ -107,11 +107,10 @@ func (room *Room) StartGame() RoomSettings {
 	room.cycleCurrPlayer()
 
 	room.Game.ResetStartTime()
-	return room.Settings
+	return nil
 }
 
 func (room *Room) FinishGame() {
-	room.Game = nil
 	room.Stage = Post
 }
 
@@ -134,11 +133,26 @@ func (room *Room) cycleCurrPlayer() {
 	}
 }
 
-func (room *Room) OnCorrectGuess(player string) int {
+// handlers a player's guess and returns the increase in the score of player due to the guess
+func (room *Room) OnGuess(player string, text string) int {
+	// nothing happens if a player guesses when game is not in session
+	if room.Stage != Playing {
+		return 0
+	}
+	// current player cannot make a guess
+	if player == room.GetCurrPlayer() {
+		return 0
+	}
+	// check whether the text is a correct guess or not, if not, do not increase the score
+	if !room.Game.ContainsCurrWord(text) {
+		return 0
+	}
+	// cannot increase score of player if they already guessed
 	if room.Game.guessers[player] {
 		return 0
 	}
 
+	// calculate the score changes for successful guess
 	timeSinceStartSecs := time.Now().Unix() - room.Game.startTimeSecs
 	timeLimitSecs := room.Settings.TimeLimitSecs
 

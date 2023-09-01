@@ -1,7 +1,6 @@
 package server
 
 import (
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -51,14 +50,4 @@ func (brokerMap *BrokerMap) startCleanup(period time.Duration) {
 			return true
 		})
 	}
-}
-
-func (brokerMap *BrokerMap) RandomCode() string {
-	codes := make([]string, 0)
-	brokerMap.m.Range(func(key, value any) bool {
-		codes = append(codes, key.(string))
-		return true
-	})
-	randomIndex := rand.Intn(len(codes))
-	return codes[randomIndex]
 }

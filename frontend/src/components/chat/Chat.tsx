@@ -1,6 +1,8 @@
 import "./Chat.css"
 import { For, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
+import { RoomProps } from "../../pages/room/Room";
+import { CHAT_CODE } from "../../pages/room/messages";
 
 export interface ChatMsg {
     text: string;
@@ -8,9 +10,13 @@ export interface ChatMsg {
     guessIncScore: number;
 }
 
-const Chat = () => {
+const Chat = ({ room }: RoomProps) => {
     const [newChat, setNewChat] = createSignal("");
     const [chats, setChats] = createStore<ChatMsg[]>([]);
+
+    room.subscribe(CHAT_CODE, (payload) => {
+
+    });
 
     return (
         <div class="Chat">
