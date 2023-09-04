@@ -1,10 +1,10 @@
-package server
+package controller
 
 import (
-	"encoding/hex"
 	"encoding/json"
+	"guessasketch/message"
+	"guessasketch/utils"
 	"log"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -17,7 +17,7 @@ type RoomCodeResp struct {
 
 type WsController struct {
 	upgrader     websocket.Upgrader
-	brokerMap    *BrokerMap
+	brokerMap    *message.BrokerMap
 	gameWordBank []string
 }
 
@@ -29,35 +29,23 @@ func NewWsController(gameWordBank []string) *WsController {
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	return &WsController{
 		upgrader:     upgrader,
-		brokerMap:    NewBrokerMap(time.Minute),
+		brokerMap:    message.NewBrokerMap(time.Minute),
 		gameWordBank: gameWordBank,
 	}
 }
 
-func generateCode(len int) (string, error) {
-	b := make([]byte, len/2)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
-}
-
 func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w);
+	utils.EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
-	code, err := generateCode(8)
+	code, err := utils.GenerateCode(8)
 	if err != nil {
-		resp := ErrorMsg{Status: 500, ErrorDesc: "Failed to generate a valid error code"}
-		SendErrResp(w, resp)
+		resp := utils.ErrorMsg{Status: 500, ErrorDesc: "Failed to generate a valid error code"}
+		utils.SendErrResp(w, resp)
 		return
 	}
 
-	broker := NewBroker(code, controller.gameWordBank)
+	broker := message.NewBroker(code, controller.gameWordBank)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
 	controller.brokerMap.Store(code, broker)
@@ -74,22 +62,22 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 }
 
 func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w);
+	utils.EnableCors(&w)
 
 	query := r.URL.Query()
 	code := query.Get("code")
 	player := query.Get("name")
 
 	if len(player) > 15 {
-		resp := ErrorMsg{Status: 400, ErrorDesc: "Player name must be 15 or less characters"}
-		SendErrResp(w, resp)
+		resp := utils.ErrorMsg{Status: 400, ErrorDesc: "Player name must be 15 or less characters"}
+		utils.SendErrResp(w, resp)
 		return
 	}
 
 	broker := controller.brokerMap.Load(code)
 	if broker == nil {
-		resp := ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
-		SendErrResp(w, resp)
+		resp := utils.ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
+		utils.SendErrResp(w, resp)
 		return
 	}
 
@@ -100,19 +88,22 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 	}
 
 	// create a new subscription channel and join the broker with it
-	subscriber := make(Subscriber)
-	broker.Subscribe <- SubscriberMsg{Subscriber: subscriber, Player: player}
+	subscriber := make(message.Subscriber)
+	broker.Subscribe <- message.SubscriberMsg{Subscriber: subscriber, Player: player}
 
 	go subscriberListener(ws, subscriber)
 	go socketListener(ws, broker, subscriber)
 }
 
 // reads messages from socket and sends them to broker
-func socketListener(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
+func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber message.Subscriber) {
 	defer func() {
 		broker.Unsubscribe <- subscriber
 		ws.Close()
 		log.Printf("Socket listener close function called")
+		if panicInfo := recover(); panicInfo != nil {
+			log.Println(panicInfo)
+		}
 	}()
 	for {
 		_, p, err := ws.ReadMessage()
@@ -121,15 +112,18 @@ func socketListener(ws *websocket.Conn, broker *Broker, subscriber Subscriber) {
 			return
 		}
 		// read any message from the socket and broadcast it to the broker
-		broker.SendMessage <- SentMsg{Message: p, Sender: subscriber}
+		broker.SendMessage <- message.SentMsg{Message: p, Sender: subscriber}
 	}
 }
 
 // reads messages from a subscribed channel and sends them to socket
-func subscriberListener(ws *websocket.Conn, subscriber Subscriber) {
+func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 	defer func() {
 		ws.Close()
 		log.Printf("Subscriber channel was closed")
+		if panicInfo := recover(); panicInfo != nil {
+			log.Println(panicInfo)
+		}
 	}()
 	for resp := range subscriber {
 		// read values from channel and write back to socket

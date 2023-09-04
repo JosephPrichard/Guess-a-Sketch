@@ -1,10 +1,10 @@
-package server
+package message
 
 import (
 	"encoding/json"
 	"guessasketch/store"
+	"guessasketch/utils"
 	"log"
-	"net/http"
 )
 
 const (
@@ -46,11 +46,6 @@ type PlayerMsg struct {
 	Player      string
 }
 
-type ErrorMsg struct {
-	Status    int
-	ErrorDesc string
-}
-
 type InputPayload struct {
 	Code int
 	Msg  json.RawMessage
@@ -61,18 +56,8 @@ type OutputPayload struct {
 	Msg  interface{}
 }
 
-func SendErrResp(w http.ResponseWriter, msg ErrorMsg) {
-	b, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("Failed to serialize error for http response")
-		return
-	}
-	w.WriteHeader(msg.Status)
-	w.Write(b)
-}
-
 func SendErrMsg(ch chan []byte, errorDesc string) {
-	msg := ErrorMsg{ErrorDesc: errorDesc}
+	msg := utils.ErrorMsg{ErrorDesc: errorDesc}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("Failed to serialize error for ws message")

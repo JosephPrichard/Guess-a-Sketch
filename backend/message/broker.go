@@ -1,8 +1,9 @@
-package server
+package message
 
 import (
 	"encoding/json"
 	"guessasketch/store"
+	"guessasketch/utils"
 	"log"
 	"sync/atomic"
 	"time"
@@ -118,7 +119,7 @@ func (broker *Broker) onResetState() {
 	resp, err := HandleReset(broker)
 	if err != nil {
 		// if an error does exist, serialize it and replace the success message with it
-		errMsg := ErrorMsg{ErrorDesc: err.Error()}
+		errMsg := utils.ErrorMsg{ErrorDesc: err.Error()}
 		b, err := json.Marshal(errMsg)
 		if err != nil {
 			log.Printf("Failed to serialize error for ws message")
@@ -138,6 +139,11 @@ func (broker *Broker) onStop() {
 }
 
 func (broker *Broker) Start() {
+	defer func() {
+		if panicInfo := recover(); panicInfo != nil {
+			log.Println(panicInfo)
+		}
+	}()
 	for {
 		select {
 		case subMsg := <-broker.Subscribe:

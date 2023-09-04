@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
-	"guessasketch/server"
+	"guessasketch/controller"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,7 +26,7 @@ func main() {
 	gameWordBank := strings.Split(string(data), "\n")
 	// log.Printf("Word bank size %s", string(data))
 
-	wsController := server.NewWsController(gameWordBank)
+	wsController := controller.NewWsController(gameWordBank)
 
 	http.HandleFunc("/rooms/create", wsController.CreateRoom)
 	http.HandleFunc("/rooms/join", wsController.JoinRoom)
