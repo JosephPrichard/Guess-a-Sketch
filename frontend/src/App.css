@@ -2,64 +2,74 @@
   text-align: center;
 }
 
+.Panel {
+  background-color: rgb(230,230,230);
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 5px 5px rgb(165,165,165);
+}
+
 .Input {
   display: block;
-  height: 40px;
+  height: 35px;
   width: calc(100% - 25px);
-  font-size: 18px;
+  font-size: 19px;
   margin: auto;
   padding-left: 10px;
   padding-right: 10px;
   outline: none;
+  line-height: 16px;
   border-radius: 6px;
-  border: solid rgb(20,20,20) 1px;
+  border: 2px solid rgb(100,100,100);
+  font-family: 'Nunito', arial, serif; 
+  font-weight: bold;
+}
+
+.SelectOption {
+  font-size: 15px;
+}
+
+.TextArea {
+  width: calc(100% - 25px);
+  font-size: 19px;
+  border-radius: 6px;
+  border: 2px solid rgb(100,100,100);
+  font-family: 'Nunito', arial, serif; 
+  font-weight: bold;
+  margin-left: 12.5px;
+  margin-right: 20px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-size: 14px;
 }
 
 .Button {
-  color: white;
-  border-radius: 5px;
-  font-size: 17px;
-  border: 0;
-  height: 40px;
   width: 100%;
-  display: block;
-
-  background-color: #405cf5;
-  border: 1px solid transparent;
-  border-radius: .25rem;
-  box-shadow: rgba(0, 0, 0, 0.02) 0 1px 3px 0;
-  box-sizing: border-box;
+  height: 40px;
+  font-size: 19px;
   color: #fff;
+  padding: 5px 10px;
+  font-family: 'Nunito', arial, serif; 
+  font-weight: bold;
   cursor: pointer;
-  display: inline-flex;
-  font-family: 'Schoolbell', arial, serif; 
-  font-weight: 600;
-  font-size: 20px;
-  justify-content: center;
-  line-height: 1.25;
-  min-height: 3rem;
-  padding: calc(.875rem - 1px) calc(1.5rem - 1px);
-  text-decoration: none;
-  transition: all 250ms;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: manipulation;
-}
-
-.Button:hover,
-.Button:focus {
-  background-color: #405cf5;
-  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px;
+  transition: all 0.3s ease;
+  position: relative;
+  display: inline-block;
+  outline: none;
+  border-radius: 5px;
+  border: none;
+  background: #3a86ff;
+  box-shadow: 0 5px #4433ff;
 }
 
 .Button:hover {
-  transform: translateY(-1px);
+  box-shadow: 0 3px #4433ff;
+  top: 1px;
 }
 
 .Button:active {
-  background-color: #374ecf;
-  box-shadow: rgba(0, 0, 0, .06) 0 2px 4px;
-  transform: translateY(0);
+  box-shadow: 0 0 #4433ff;
+  top: 5px;
 }
 
 .Space {

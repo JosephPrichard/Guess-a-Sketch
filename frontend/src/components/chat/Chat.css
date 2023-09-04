@@ -1,9 +1,6 @@
 .Chat {
-    width: 250px;
-    height: 430px;
-    background-color: rgb(235,235,235);
-    border-radius: 2px;
-    padding: 10px;
+    width: 200px;
+    height: 400px;
     display: grid;
     grid-template-rows: auto 1fr;
 }

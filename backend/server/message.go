@@ -25,7 +25,7 @@ type TextMsg struct {
 	Text string
 }
 
-type DrawMsg = store.Stroke
+type DrawMsg = store.Circle
 
 type ChatMsg = store.Chat
 

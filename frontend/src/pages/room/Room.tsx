@@ -6,6 +6,7 @@ import { useParams } from "@solidjs/router";
 import TopBar from "../../components/topbar/TopBar";
 import { RoomConn, useRoomConnection } from "./useRoomListener";
 import { START_CODE } from "./messages";
+import Settings from "../../components/settings/Settings";
 
 export interface RoomProps {
     room: RoomConn
@@ -21,14 +22,15 @@ const Room = () => {
 
     return (
         <div class="Base">
-           <div>
+           {/* <div>
                 <TopBar room={room} />
                 <div class="Wrapper">
-                    <ScoreBoard room={room} />
                     <Canvas room={room} />
                     <Chat room={room} />
                 </div>
-           </div>
+                <ScoreBoard room={room} />
+           </div> */}
+           <Settings room={room} />
         </div>
     );
 }

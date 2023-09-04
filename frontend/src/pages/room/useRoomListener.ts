@@ -1,4 +1,5 @@
-const DOMAIN = "localhost:8080";
+import { DOMAIN } from "../../App";
+import { getLocalPlayer } from "../home/Home.service";
 
 interface Payload {
     code: number;
@@ -12,7 +13,8 @@ export interface RoomConn {
 }
 
 export const useRoomConnection = (code: string): RoomConn => {
-    let socket = new WebSocket(`ws://${DOMAIN}/rooms/${code}`);
+    let player = getLocalPlayer();
+    let socket = new WebSocket(`ws://${DOMAIN}/rooms?code=${code}&player=${player}`);
 
     return {
         send: (payload) => {

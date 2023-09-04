@@ -1,15 +1,25 @@
-import { For } from "solid-js";
+import { For, createSignal } from "solid-js";
 import "./ScoreBoard.css";
-import { createStore } from "solid-js/store";
+import { createMutable } from "solid-js/store";
 import { RoomProps } from "../../pages/room/Room";
 
+type ScoreBoard = {[key:string]:number};
+
 const ScoreBoard = ({ room }: RoomProps) => {
-    const [scoreBoard, setScoreBoard] = createStore<ScoreProps[]>([]);
+    const [players, setPlayers] = createSignal<string[]>([]);
+    const scoreBoard = createMutable<ScoreBoard>({});
 
     return (
-        <div class="ScoreBoard">
-            <For each={scoreBoard}>
-                {(score) => <Score {...score}/>}
+        <div class="Panel ScoreBoard">
+            <For each={players()}>
+                {(player) => {
+                    return (
+                        <Score 
+                            player={player} 
+                            points={scoreBoard[player]}
+                        />
+                    );
+                }}
             </For>
         </div>
     );
@@ -23,12 +33,12 @@ interface ScoreProps {
 const Score = (score: ScoreProps) => {
     return (
         <div class="Score">
-            <span class="BoldText ScorePiece">
+            <div class="BoldText">
                 {score.player}
-            </span>
-            <span class="ScorePiece">
-                {score.points}
-            </span>
+            </div>
+            <div class="ScoreSubtitle">
+                Score: {score.points}
+            </div>
         </div>
     );
 }

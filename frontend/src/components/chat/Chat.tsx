@@ -19,7 +19,7 @@ const Chat = ({ room }: RoomProps) => {
     });
 
     return (
-        <div class="Chat">
+        <div class="Panel Chat">
             <div>
                 <For each={chats}>
                     {(chat) => <ChatMsg {...chat}/>}

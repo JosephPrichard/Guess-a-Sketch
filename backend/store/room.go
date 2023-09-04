@@ -97,7 +97,7 @@ func (room *Room) Leave(playerToLeave string) int {
 }
 
 // starts the game and returns a snapshot of the settings used to start the game
-func (room *Room) StartGame() error {
+func (room *Room) StartGame() {
 	room.Stage = Playing
 
 	room.Game.ClearGuessers()
@@ -107,7 +107,6 @@ func (room *Room) StartGame() error {
 	room.cycleCurrPlayer()
 
 	room.Game.ResetStartTime()
-	return nil
 }
 
 func (room *Room) FinishGame() {

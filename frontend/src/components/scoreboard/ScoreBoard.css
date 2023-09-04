@@ -1,20 +1,22 @@
 .ScoreBoard {
-    width: 250px;
-    height: 430px;
-    background-color: rgb(235,235,235);
-    border-radius: 2px;
-    padding: 10px;
+    height: 115px;
+    margin-top: 10px;
+    padding-left: 30px;
+    padding-right: 30px;
+    line-height: 45px;
+    font-size: 22px;
+    color: rgb(60,60,60);
+    display: flex;
 }
 
 .Score {
-    display: flex;
-    font-weight: 500px;
-    font-size: 18px;
+    font-weight: bold;
+    font-size: 17px;
     line-height: 25px;
     padding: 2px 15px;
 }
 
-.ScorePiece {
-    text-align: left;
-    width: 50%;
+.ScoreSubtitle {
+    font-weight: thin;
+    font-size: 13px;
 }

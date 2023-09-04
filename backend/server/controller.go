@@ -42,7 +42,13 @@ func generateCode(len int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
+
 func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w);
+
 	// generate a code, create a broker, start it, then store it in the map
 	code, err := generateCode(8)
 	if err != nil {
@@ -68,12 +74,14 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 }
 
 func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w);
+
 	query := r.URL.Query()
 	code := query.Get("code")
 	player := query.Get("name")
 
-	if len(player) < 5 || len(player) > 15 {
-		resp := ErrorMsg{Status: 400, ErrorDesc: "Player name must be between 5 and 15 characters"}
+	if len(player) > 15 {
+		resp := ErrorMsg{Status: 400, ErrorDesc: "Player name must be 15 or less characters"}
 		SendErrResp(w, resp)
 		return
 	}

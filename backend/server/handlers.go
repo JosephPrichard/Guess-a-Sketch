@@ -16,6 +16,7 @@ const (
 	MaxTimeLimit   = 240
 	MinPlayerLimit = 2
 	MaxPlayerLimit = 12
+	MaxTotalRounds = 6
 )
 
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
@@ -83,6 +84,9 @@ func handleOptionsMessage(room *store.Room, msg OptionsMsg, player string) ([]by
 	}
 	if msg.PlayerLimit < len(room.Players) && msg.PlayerLimit != 0 {
 		return nil, errors.New("Cannot reduce player limit lower than number of players currently in the room")
+	}
+	if msg.TotalRounds > MaxTotalRounds && msg.TotalRounds != 0 {
+		return nil, fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
 	}
 	room.Settings.UpdateSettings(msg)
 

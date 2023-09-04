@@ -4,10 +4,10 @@ import { RoomProps } from "../../pages/room/Room";
 import { DRAW_CODE } from "../../pages/room/messages";
 
 const COLORS = [
-    "white", "grey", "red", "orange", "yellow", "lime", 
-    "darkgreen", "cyan", "blue", "purple", "pink", "brown"
+    "black", "white", "grey", "red", "orange", "yellow", "lime", 
+    "darkgreen", "cyan", "blue", "purple", "pink", "brown",
 ];
-const SIZES = [4, 6, 8, 12, 16];
+const SIZES = [4, 6, 8, 12, 16, 20];
 
 interface Point { 
     x: number; 
@@ -20,19 +20,17 @@ function drawCircle(ctx: CanvasRenderingContext2D, radius: number, point: Point)
     ctx.fill();
 };
 
-function interpolate(radius: number, from: Point, to: Point) {
+function interpolate(ctx: CanvasRenderingContext2D, radius: number, from: Point, to: Point) {
     const xDiff = to.x - from.x;
     const yDiff = to.y - from.y;
     const segments = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2)) / radius;
-    const points: Point[] = [];
     for (let i = 0; i < segments; i++) {
         const nextPoint = {
-            x: from.x + xDiff / segments,
-            y: from.y + yDiff / segments
+            x: from.x + (xDiff / segments) * i,
+            y: from.y + (yDiff / segments) * i
         };
-        points.push(nextPoint);
+        drawCircle(ctx, radius, nextPoint)
     }
-    return points;
 }
 
 const Canvas = ({ room }: RoomProps) => {
@@ -45,7 +43,7 @@ const Canvas = ({ room }: RoomProps) => {
     const getCanvas = () => {
         const canvas = canvasRef()!;
         const ctx = canvas.getContext("2d")!;
-        return { canvas, ctx }
+        return { canvas, ctx };
     };
 
     const onDrawEvent = (e: MouseEvent) => {
@@ -60,38 +58,27 @@ const Canvas = ({ room }: RoomProps) => {
             y: scaleY * (e.clientY - rect.top)
         };
 
-        let points: Point[] = [point];
-
         const radius = SIZES[sizeIndex()];
+        drawCircle(ctx, radius, point);
+
         const lastPos = prevPos();
         if (lastPos) {
-           points.concat(interpolate(radius, point, lastPos));
-        }
-    
-        for (const p of points) {
-            drawCircle(ctx, radius, p);
+            interpolate(ctx, radius, point, lastPos);
         }
 
         setPrevPos(point);
     };
-
-    onMount(() => {
-        const { canvas, ctx } = getCanvas();
-        ctx.fillStyle = "rgb(235, 235, 235)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    });
 
     room.subscribe(DRAW_CODE, (payload) => {
 
     });
 
     return (
-        <div>
+        <div class="Panel Canvas">
             <canvas 
                 ref={setCanvasRef} 
-                class="Canvas"
                 width="700"
-                height="450"
+                height="380"
                 onmousemove={(e) => {
                     if (isDrawing()) {
                         onDrawEvent(e);
@@ -120,28 +107,17 @@ interface EaselProps {
 
 const Easel = ({ setColor, setSize }: EaselProps) => {
     return (
-        <div class="Paint">
-            <div>
+        <div class="Easel">
+            <div class="ColorWrapper">
                 <Index each={COLORS}>
                     {(color, i) => (
                         <div 
-                            class="SmallTile" 
+                            class="ColorTile" 
                             style={{ "background-color": color() }} 
                             onclick={() => setColor(i)}
                         />
                     )}
                 </Index>
-            </div>
-            <div>
-                <Index each={SIZES}>
-                    {(size, i) => (
-                        <div 
-                            class="LargeTile"
-                            onclick={() => setSize(i)}
-                        />
-                    )}
-                </Index>
-                <div class="LargeTile" />
             </div>
         </div>
     );
