@@ -156,10 +156,10 @@ func handleDrawMessage(room *game.Room, msg DrawMsg, player string) ([]byte, err
 }
 
 func HandleJoin(room *game.Room, player string) ([]byte, error) {
-	if !room.CanJoin(player) {
-		return nil, errors.New("Player cannot join because room is at player limit")
+	err := room.Join(player)
+	if err != nil {
+		return nil, err
 	}
-	room.Join(player)
 
 	// broadcast the new player to all subscribers
 	lastIndex := len(room.Players) - 1

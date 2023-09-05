@@ -15,19 +15,23 @@ var keyFunc = func(token *jwt.Token) (interface{}, error) {
 }
 
 type Session struct {
-	ID string
+	ID    string
+	Guest bool
 	jwt.RegisteredClaims
 }
 
 func NewSession(id string) Session {
 	return Session{
 		ID:               id,
+		Guest:            false,
 		RegisteredClaims: jwt.RegisteredClaims{},
 	}
 }
 
 func GuestSession() Session {
-	return NewSession(uuid.New().String())
+	session := NewSession(uuid.New().String())
+	session.Guest = true
+	return session
 }
 
 func SetSession(w http.ResponseWriter, session Session) error {
@@ -75,5 +79,9 @@ type AuthServer struct {
 }
 
 func (server *AuthServer) Login(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (server *AuthServer) Logout(w http.ResponseWriter, r *http.Request) {
 
 }

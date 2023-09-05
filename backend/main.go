@@ -34,7 +34,7 @@ func main() {
 	// log.Printf("Word bank size %s", string(data))
 
 	wsServer := api.NewWsServer(gameWordBank)
-	playerServer := api.NewPlayerServer()
+	playerServer := api.NewPlayerServer(nil)
 
 	http.HandleFunc("/rooms/create", wsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", wsServer.JoinRoom)

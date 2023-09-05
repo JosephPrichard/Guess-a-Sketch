@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"time"
@@ -63,11 +64,6 @@ func (room *Room) ToMessage() []byte {
 	return b
 }
 
-func (room *Room) CanJoin(player string) bool {
-	_, exists := room.ScoreBoard[player]
-	return !exists
-}
-
 func (room *Room) PlayerIndex(playerToFind string) int {
 	// find player in the slice
 	index := -1
@@ -80,9 +76,17 @@ func (room *Room) PlayerIndex(playerToFind string) int {
 	return index
 }
 
-func (room *Room) Join(player string) {
+func (room *Room) Join(player string) error {
+	_, exists := room.ScoreBoard[player]
+	if !exists {
+		return errors.New("Player cannot join, username is already in use")
+	}
+	if len(room.Players) >= room.Settings.playerLimit {
+		return errors.New("Player cannot join, room is at player limit")
+	}
 	room.Players = append(room.Players, player)
 	room.ScoreBoard[player] = 0
+	return nil
 }
 
 func (room *Room) Leave(playerToLeave string) int {
