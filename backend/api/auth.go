@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"guessasketch/utils"
 	"net/http"
 	"time"
@@ -10,6 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var jwtKey = utils.GetEnvVar("JWT_SECRET_KEY")
+var keyFunc = func(token *jwt.Token) (interface{}, error) {
+	return jwtKey, nil
+}
+
 type Session struct {
 	ID string
 	jwt.RegisteredClaims
@@ -17,9 +21,13 @@ type Session struct {
 
 func NewSession(id string) Session {
 	return Session{
-		ID: id,
+		ID:               id,
 		RegisteredClaims: jwt.RegisteredClaims{},
 	}
+}
+
+func GuestSession() Session {
+	return NewSession(uuid.New().String())
 }
 
 func SetSession(w http.ResponseWriter, session Session) error {
@@ -27,15 +35,15 @@ func SetSession(w http.ResponseWriter, session Session) error {
 
 	session.ExpiresAt = jwt.NewNumericDate(expiry)
 
-	value, err := json.Marshal(session)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, session)
+	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
 		return err
 	}
 
-	// update the session cookie
 	cookie := &http.Cookie{
 		Name:    "session",
-		Value:   string(value),
+		Value:   tokenString,
 		Expires: expiry,
 	}
 	http.SetCookie(w, cookie)
@@ -47,16 +55,18 @@ func GetSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
 
 	var session Session
 	if cookie != nil && err == nil {
-		// unmarshal the old session
-		err = json.Unmarshal([]byte(cookie.Value), &session)
+		token, err := jwt.ParseWithClaims(cookie.Value, &session, keyFunc)
 		if err != nil {
 			return nil, err
 		}
+		if !token.Valid {
+			session = GuestSession()
+		}
 	} else {
-		// issue a new session
-		session = NewSession(uuid.New().String())
+		// issue a new guest session
+		session = GuestSession()
 	}
-	
+
 	SetSession(w, session)
 	return &session, nil
 }
