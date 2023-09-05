@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"guessasketch/store"
+	"guessasketch/game"
 	"log"
 )
 
@@ -66,11 +66,11 @@ func HandleMessage(broker *Broker, message []byte, player string) ([]byte, error
 	}
 }
 
-func handleOptionsMessage(room *store.Room, msg OptionsMsg, player string) ([]byte, error) {
+func handleOptionsMessage(room *game.Room, msg OptionsMsg, player string) ([]byte, error) {
 	if room.PlayerIsNotHost(player) {
 		return nil, errors.New("Player must be the host to change the game options")
 	}
-	if room.Stage != store.Lobby {
+	if room.Stage != game.Lobby {
 		return nil, errors.New("Cannot modify options for a game after it starts")
 	}
 	if len(msg.WordBank) < MinPlayerLimit && len(msg.WordBank) != 0 {
@@ -100,7 +100,7 @@ func handleStartMessage(broker *Broker, player string) ([]byte, error) {
 	if room.PlayerIsNotHost(player) {
 		return nil, errors.New("Player must be the host to start the game")
 	}
-	if room.Stage == store.Playing {
+	if room.Stage == game.Playing {
 		return nil, errors.New("Cannot start a game that is already started")
 	}
 
@@ -110,14 +110,14 @@ func handleStartMessage(broker *Broker, player string) ([]byte, error) {
 	broker.PostponeExpiration()
 
 	beginMsg := BeginMsg{
-		NextWord:   room.Game.CurrWord,
+		NextWord:   room.Turn.CurrWord,
 		NextPlayer: room.GetCurrPlayer(),
 	}
 	payload := OutputPayload{Code: BeginCode, Msg: beginMsg}
 	return marshalPayload(payload)
 }
 
-func handleTextMessage(room *store.Room, msg TextMsg, player string) ([]byte, error) {
+func handleTextMessage(room *game.Room, msg TextMsg, player string) ([]byte, error) {
 	text := msg.Text
 	if len(text) > MaxChatLen || len(text) < MinChatLen {
 		return nil, fmt.Errorf("Chat message must be less than %d characters in length and more than %d", MaxChatLen, MinChatLen)
@@ -141,21 +141,21 @@ func handleTextMessage(room *store.Room, msg TextMsg, player string) ([]byte, er
 }
 
 // color, radius, x, and y are unvalidated fields for performance
-func handleDrawMessage(room *store.Room, msg DrawMsg, player string) ([]byte, error) {
-	if room.Stage != store.Playing {
+func handleDrawMessage(room *game.Room, msg DrawMsg, player string) ([]byte, error) {
+	if room.Stage != game.Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
 	if player != room.GetCurrPlayer() {
 		return nil, errors.New("Player cannot draw on the canvas")
 	}
 
-	room.Game.Draw(msg)
+	room.Turn.Draw(msg)
 
 	payload := OutputPayload{Code: DrawCode, Msg: msg}
 	return marshalPayload(payload)
 }
 
-func HandleJoin(room *store.Room, player string) ([]byte, error) {
+func HandleJoin(room *game.Room, player string) ([]byte, error) {
 	if !room.CanJoin(player) {
 		return nil, errors.New("Player cannot join because room is at player limit")
 	}
@@ -171,7 +171,7 @@ func HandleJoin(room *store.Room, player string) ([]byte, error) {
 	return marshalPayload(payload)
 }
 
-func HandleLeave(room *store.Room, player string) ([]byte, error) {
+func HandleLeave(room *game.Room, player string) ([]byte, error) {
 	leaveIndex := room.Leave(player)
 	if leaveIndex < 0 {
 		return nil, errors.New("Failed to leave the room, player couldn't be found")
@@ -201,7 +201,7 @@ func HandleReset(broker *Broker) ([]byte, error) {
 		broker.StartResetTimer(room.Settings.TimeLimitSecs)
 
 		beginMsg = &BeginMsg{
-			NextWord:   room.Game.CurrWord,
+			NextWord:   room.Turn.CurrWord,
 			NextPlayer: room.GetCurrPlayer(),
 		}
 	} else {

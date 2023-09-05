@@ -1,4 +1,4 @@
-package controller
+package api
 
 import (
 	"encoding/json"
@@ -15,26 +15,26 @@ type RoomCodeResp struct {
 	Code string
 }
 
-type WsController struct {
+type WsServer struct {
 	upgrader     websocket.Upgrader
-	brokerMap    *message.BrokerMap
+	brokerage    *message.Brokerage
 	gameWordBank []string
 }
 
-func NewWsController(gameWordBank []string) *WsController {
+func NewWsServer(gameWordBank []string) *WsServer {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	return &WsController{
+	return &WsServer{
 		upgrader:     upgrader,
-		brokerMap:    message.NewBrokerMap(time.Minute),
+		brokerage:    message.NewBrokerMap(time.Minute),
 		gameWordBank: gameWordBank,
 	}
 }
 
-func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Request) {
+func (controller *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
@@ -48,7 +48,7 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 	broker := message.NewBroker(code, controller.gameWordBank)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
-	controller.brokerMap.Store(code, broker)
+	controller.brokerage.Store(code, broker)
 
 	roomCode := RoomCodeResp{Code: code}
 	b, err := json.Marshal(roomCode)
@@ -61,7 +61,7 @@ func (controller *WsController) CreateRoom(w http.ResponseWriter, r *http.Reques
 	w.Write(b)
 }
 
-func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request) {
+func (controller *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	query := r.URL.Query()
@@ -74,7 +74,7 @@ func (controller *WsController) JoinRoom(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	broker := controller.brokerMap.Load(code)
+	broker := controller.brokerage.Load(code)
 	if broker == nil {
 		resp := utils.ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
 		utils.SendErrResp(w, resp)

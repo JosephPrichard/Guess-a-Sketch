@@ -1,4 +1,4 @@
-package store
+package game
 
 import (
 	"strings"
@@ -8,12 +8,12 @@ import (
 type Circle struct {
 	Color     uint8
 	Radius    uint8
-	X         uint16 // position of where the circle ends on the canvas
+	X         uint16
 	Y         uint16
-	Connected bool // stores whether this circle is connected to the previous one
+	Connected bool
 }
 
-type Game struct {
+type GameTurn struct {
 	CurrWord        string          // current word to guess in session
 	CurrPlayerIndex int             // index of player drawing on canvas
 	Canvas          []Circle        // canvas of circles, acts as a sparse matrix which can be used to contruct a bitmap
@@ -21,8 +21,8 @@ type Game struct {
 	startTimeSecs   int64           // start time in milliseconds (unix epoch)
 }
 
-func NewGame() Game {
-	return Game{
+func NewGameTurn() GameTurn {
+	return GameTurn{
 		Canvas:          make([]Circle, 0),
 		CurrPlayerIndex: -1,
 		startTimeSecs:   time.Now().Unix(),
@@ -30,25 +30,25 @@ func NewGame() Game {
 	}
 }
 
-func (game *Game) ClearGuessers() {
+func (game *GameTurn) ClearGuessers() {
 	for k := range game.guessers {
 		delete(game.guessers, k)
 	}
 }
 
-func (game *Game) ClearCanvas() {
+func (game *GameTurn) ClearCanvas() {
 	game.Canvas = game.Canvas[0:0]
 }
 
-func (game *Game) ResetStartTime() {
+func (game *GameTurn) ResetStartTime() {
 	game.startTimeSecs = time.Now().Unix()
 }
 
-func (game *Game) CalcResetScore() int {
+func (game *GameTurn) CalcResetScore() int {
 	return len(game.guessers) * 50
 }
 
-func (game *Game) ContainsCurrWord(text string) bool {
+func (game *GameTurn) ContainsCurrWord(text string) bool {
 	for _, word := range strings.Split(text, " ") {
 		if word == game.CurrWord {
 			return true
@@ -57,10 +57,10 @@ func (game *Game) ContainsCurrWord(text string) bool {
 	return false
 }
 
-func (game *Game) SetGuesser(player string) {
+func (game *GameTurn) SetGuesser(player string) {
 	game.guessers[player] = true
 }
 
-func (game *Game) Draw(stroke Circle) {
+func (game *GameTurn) Draw(stroke Circle) {
 	game.Canvas = append(game.Canvas, stroke)
 }

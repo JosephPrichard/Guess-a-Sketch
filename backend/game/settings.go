@@ -1,4 +1,4 @@
-package store
+package game
 
 type Options struct {
 	PlayerLimit   int
@@ -14,7 +14,7 @@ type RoomSettings struct {
 	customWordBank []string // custom words added in the bank by host
 }
 
-func NewSettings() RoomSettings {
+func NewRoomSettings() RoomSettings {
 	return RoomSettings{
 		playerLimit:    8,
 		TimeLimitSecs:  45,

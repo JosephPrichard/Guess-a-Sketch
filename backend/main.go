@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
-	"guessasketch/controller"
+	"guessasketch/api"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,9 +26,13 @@ func main() {
 	gameWordBank := strings.Split(string(data), "\n")
 	// log.Printf("Word bank size %s", string(data))
 
-	wsController := controller.NewWsController(gameWordBank)
+	wsServer := api.NewWsServer(gameWordBank)
+	playerServer := api.NewPlayerServer()
 
-	http.HandleFunc("/rooms/create", wsController.CreateRoom)
-	http.HandleFunc("/rooms/join", wsController.JoinRoom)
+	http.HandleFunc("/rooms/create", wsServer.CreateRoom)
+	http.HandleFunc("/rooms/join", wsServer.JoinRoom)
+	http.HandleFunc("/players/stats", playerServer.Get)
+	http.HandleFunc("/players/leaderboard", playerServer.Leaderboard)
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

@@ -1,4 +1,4 @@
-package store
+package game
 
 import (
 	"encoding/json"
@@ -25,10 +25,10 @@ type Room struct {
 	Players        []string       // stores all players in the order they joined in
 	ScoreBoard     map[string]int // maps players to scores
 	ChatLog        []Chat         // stores the chat log
-	Stage          int            // the current stage the room is (upports concurrent operations)
+	Stage          int            // the current stage the room is
 	sharedWordBank []string       // reference to the shared wordbank
 	Settings       RoomSettings   // settings for the room set before game starts
-	Game           Game           // if the game state is nil, no game is being played
+	Turn           GameTurn       // stores the current game turn
 }
 
 func NewRoom(code string, sharedWordBank []string) Room {
@@ -38,16 +38,16 @@ func NewRoom(code string, sharedWordBank []string) Room {
 		ScoreBoard:     make(map[string]int),
 		ChatLog:        make([]Chat, 0),
 		sharedWordBank: sharedWordBank,
-		Settings:       NewSettings(),
-		Game:           NewGame(),
+		Settings:       NewRoomSettings(),
+		Turn:           NewGameTurn(),
 	}
 }
 
 func (room *Room) GetCurrPlayer() string {
-	if room.Game.CurrPlayerIndex < 0 {
+	if room.Turn.CurrPlayerIndex < 0 {
 		return ""
 	}
-	return room.Players[room.Game.CurrPlayerIndex]
+	return room.Players[room.Turn.CurrPlayerIndex]
 }
 
 func (room *Room) PlayerIsNotHost(player string) bool {
@@ -100,13 +100,13 @@ func (room *Room) Leave(playerToLeave string) int {
 func (room *Room) StartGame() {
 	room.Stage = Playing
 
-	room.Game.ClearGuessers()
-	room.Game.ClearCanvas()
+	room.Turn.ClearGuessers()
+	room.Turn.ClearCanvas()
 
 	room.setNextWord()
 	room.cycleCurrPlayer()
 
-	room.Game.ResetStartTime()
+	room.Turn.ResetStartTime()
 }
 
 func (room *Room) FinishGame() {
@@ -117,17 +117,17 @@ func (room *Room) setNextWord() {
 	// pick a new word from the shared or custom word bank
 	index := rand.Intn(len(room.sharedWordBank) + len(room.Settings.customWordBank))
 	if index < len(room.sharedWordBank) {
-		room.Game.CurrWord = room.sharedWordBank[index]
+		room.Turn.CurrWord = room.sharedWordBank[index]
 	} else {
-		room.Game.CurrWord = room.Settings.customWordBank[index]
+		room.Turn.CurrWord = room.Settings.customWordBank[index]
 	}
 }
 
 func (room *Room) cycleCurrPlayer() {
 	// go to the next player, circle back around when we reach the end
-	room.Game.CurrPlayerIndex += 1
-	if room.Game.CurrPlayerIndex >= len(room.Players) {
-		room.Game.CurrPlayerIndex = 0
+	room.Turn.CurrPlayerIndex += 1
+	if room.Turn.CurrPlayerIndex >= len(room.Players) {
+		room.Turn.CurrPlayerIndex = 0
 		room.CurrRound += 1
 	}
 }
@@ -143,27 +143,27 @@ func (room *Room) OnGuess(player string, text string) int {
 		return 0
 	}
 	// check whether the text is a correct guess or not, if not, do not increase the score
-	if !room.Game.ContainsCurrWord(text) {
+	if !room.Turn.ContainsCurrWord(text) {
 		return 0
 	}
 	// cannot increase score of player if they already guessed
-	if room.Game.guessers[player] {
+	if room.Turn.guessers[player] {
 		return 0
 	}
 
 	// calculate the score changes for successful guess
-	timeSinceStartSecs := time.Now().Unix() - room.Game.startTimeSecs
+	timeSinceStartSecs := time.Now().Unix() - room.Turn.startTimeSecs
 	timeLimitSecs := room.Settings.TimeLimitSecs
 
 	scoreInc := (timeLimitSecs-int(timeSinceStartSecs))/timeLimitSecs*400 + 50
 	room.ScoreBoard[player] += scoreInc
 
-	room.Game.SetGuesser(player)
+	room.Turn.SetGuesser(player)
 	return scoreInc
 }
 
 func (room *Room) OnResetScoreInc() int {
-	scoreInc := room.Game.CalcResetScore()
+	scoreInc := room.Turn.CalcResetScore()
 	room.ScoreBoard[room.GetCurrPlayer()] += scoreInc
 	return scoreInc
 }

@@ -2,7 +2,7 @@ package message
 
 import (
 	"encoding/json"
-	"guessasketch/store"
+	"guessasketch/game"
 	"guessasketch/utils"
 	"log"
 )
@@ -19,15 +19,15 @@ const (
 	LeaveCode   = 8
 )
 
-type OptionsMsg = store.Options
+type OptionsMsg = game.Options
 
 type TextMsg struct {
 	Text string
 }
 
-type DrawMsg = store.Circle
+type DrawMsg = game.Circle
 
-type ChatMsg = store.Chat
+type ChatMsg = game.Chat
 
 type BeginMsg struct {
 	NextWord   string

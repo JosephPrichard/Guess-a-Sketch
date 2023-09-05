@@ -2,7 +2,7 @@ package message
 
 import (
 	"encoding/json"
-	"guessasketch/store"
+	"guessasketch/game"
 	"guessasketch/utils"
 	"log"
 	"sync/atomic"
@@ -27,7 +27,7 @@ type Broker struct {
 	SendMessage chan SentMsg
 	ResetState  chan struct{}
 	Stop        chan struct{}
-	room        store.Room
+	room        game.Room
 	subscribers map[Subscriber]string
 	ExpireTime  atomic.Int64
 }
@@ -41,7 +41,7 @@ func NewBroker(code string, wordBank []string) *Broker {
 		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
 		subscribers: make(map[Subscriber]string),
-		room:        store.NewRoom(code, wordBank),
+		room:        game.NewRoom(code, wordBank),
 	}
 	broker.PostponeExpiration()
 	return broker
