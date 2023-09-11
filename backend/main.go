@@ -1,9 +1,8 @@
 package main
 
 import (
-	"embed"
-	"fmt"
-	"guessasketch/api"
+	_ "embed"
+	"guessasketch/server"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,32 +13,36 @@ import (
 )
 
 //go:embed words.txt
-var f embed.FS
+var words string
 
 func main() {
-	err := godotenv.Load()
+	var envVars map[string]string
+	envVars, err := godotenv.Read()
 	if err != nil {
-	  log.Fatal("Error loading .env file")
+		panic(err)
 	}
+	log.Println("Env vars", envVars)
 
 	rand.Seed(time.Now().UnixNano())
 	log.Printf("Started the server...")
 
-	data, err := f.ReadFile("words.txt")
-	if err != nil {
-        fmt.Println("Error reading embedded file:", err)
-        return
-    }
-	gameWordBank := strings.Split(string(data), "\n")
-	// log.Printf("Word bank size %s", string(data))
+	gameWordBank := strings.Split(words, "\n")
 
-	wsServer := api.NewWsServer(gameWordBank)
-	playerServer := api.NewPlayerServer(nil)
+	authServer := server.NewAuthServer(envVars["JWT_SECRET_KEY"])
+	playerServer := server.NewPlayerServer(nil)
+	wsServerConfig := server.WsServerConfig{
+		GameWordBank: gameWordBank, 
+		AuthServer: authServer, 
+		PlayerServer: playerServer,
+	}
+	wsServer := server.NewWsServer(wsServerConfig)
 
 	http.HandleFunc("/rooms/create", wsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", wsServer.JoinRoom)
 	http.HandleFunc("/players/stats", playerServer.Get)
 	http.HandleFunc("/players/leaderboard", playerServer.Leaderboard)
+	http.HandleFunc("/login", authServer.Login)
+	http.HandleFunc("/logout", authServer.Logout)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

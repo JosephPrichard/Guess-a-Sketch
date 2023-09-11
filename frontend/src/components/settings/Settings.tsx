@@ -1,6 +1,6 @@
 import "./Settings.css";
 import { RoomProps } from "../../pages/room/Room";
-import { START_CODE } from "../../pages/room/messages";
+import { OPTIONS_CODE, START_CODE } from "../../pages/room/messages";
 import { For, createSignal } from "solid-js";
 
 const MAX_PLAYER_SETTINGS = Array.from({ length: 11 }, (_, index) => 2 + index);
@@ -12,7 +12,6 @@ const Settings = ({ room }: RoomProps) => {
     const [roundsIndex, setRoundsIndex] = createSignal(0);
     const [drawingTimeIndex, setDrawingTimeIndex] = createSignal(0);
     const [customWords, setCustomWords] = createSignal<string[]>([]);
-    const [players, setPlayers] = createSignal<string[]>([]);
 
     room.subscribe(START_CODE, (payload) => {
 
@@ -65,10 +64,10 @@ const Settings = ({ room }: RoomProps) => {
                     Users Joined
                 </h2>
                 <div class="SettingsPlayers">
-                    <For each={players()}>
+                    <For each={room.players()}>
                         {(player) => (
                             <div class="SettingsPlayer">
-                                { player }
+                                { player.name }
                             </div>
                         )}
                     </For>

@@ -6,18 +6,18 @@ import (
 )
 
 type Circle struct {
-	Color     uint8
-	Radius    uint8
-	X         uint16
-	Y         uint16
-	Connected bool
+	Color     uint8  `json:"color"`
+	Radius    uint8  `json:"radius"`
+	X         uint16 `json:"x"`
+	Y         uint16 `json:"y"`
+	Connected bool   `json:"connected"`
 }
 
 type GameTurn struct {
-	CurrWord        string          // current word to guess in session
-	CurrPlayerIndex int             // index of player drawing on canvas
-	Canvas          []Circle        // canvas of circles, acts as a sparse matrix which can be used to contruct a bitmap
-	guessers        map[string]bool // map storing each player who has guessed correctly this game
+	CurrWord        string          `json:"currWord"`        // current word to guess in session
+	CurrPlayerIndex int             `json:"currPlayerIndex"` // index of player drawing on canvas
+	Canvas          []Circle        `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to contruct a bitmap
+	guessers        map[string]bool // map storing each player ID who has guessed correctly this game
 	startTimeSecs   int64           // start time in milliseconds (unix epoch)
 }
 
@@ -30,37 +30,37 @@ func NewGameTurn() GameTurn {
 	}
 }
 
-func (game *GameTurn) ClearGuessers() {
-	for k := range game.guessers {
-		delete(game.guessers, k)
+func (turn *GameTurn) ClearGuessers() {
+	for k := range turn.guessers {
+		delete(turn.guessers, k)
 	}
 }
 
-func (game *GameTurn) ClearCanvas() {
-	game.Canvas = game.Canvas[0:0]
+func (turn *GameTurn) ClearCanvas() {
+	turn.Canvas = turn.Canvas[0:0]
 }
 
-func (game *GameTurn) ResetStartTime() {
-	game.startTimeSecs = time.Now().Unix()
+func (turn *GameTurn) ResetStartTime() {
+	turn.startTimeSecs = time.Now().Unix()
 }
 
-func (game *GameTurn) CalcResetScore() int {
-	return len(game.guessers) * 50
+func (turn *GameTurn) CalcResetScore() int {
+	return len(turn.guessers) * 50
 }
 
-func (game *GameTurn) ContainsCurrWord(text string) bool {
+func (turn *GameTurn) ContainsCurrWord(text string) bool {
 	for _, word := range strings.Split(text, " ") {
-		if word == game.CurrWord {
+		if word == turn.CurrWord {
 			return true
 		}
 	}
 	return false
 }
 
-func (game *GameTurn) SetGuesser(player string) {
-	game.guessers[player] = true
+func (turn *GameTurn) SetGuesser(playerID string) {
+	turn.guessers[playerID] = true
 }
 
-func (game *GameTurn) Draw(stroke Circle) {
-	game.Canvas = append(game.Canvas, stroke)
+func (turn *GameTurn) Draw(stroke Circle) {
+	turn.Canvas = append(turn.Canvas, stroke)
 }

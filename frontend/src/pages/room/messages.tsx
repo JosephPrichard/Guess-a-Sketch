@@ -7,6 +7,21 @@ export const [
     FINISH_CODE,
     BEGIN_CODE,
     JOIN_CODE,
-    LEAVE_CODE
-] = Array.from(Array(10).keys());
+    LEAVE_CODE,
+    TIMEOUT_CODE
+] = Array.from(Array(11).keys());
 
+export interface Payload {
+    code: number;
+    msg: any;
+}
+
+export interface Player {
+    id: string;
+    name: string;
+}
+
+export interface PlayerMsg {
+    player: Player;
+    playerIndex: number;
+}

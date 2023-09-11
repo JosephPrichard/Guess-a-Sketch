@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	OptionsCode = 0
 	StartCode   = 1
 	TextCode    = 2
 	DrawCode    = 3
@@ -17,12 +16,13 @@ const (
 	BeginCode   = 6
 	JoinCode    = 7
 	LeaveCode   = 8
+	TimeoutCode = 9
 )
 
-type OptionsMsg = game.Options
+type StartMsg = game.RoomSettings
 
 type TextMsg struct {
-	Text string
+	Text string `json:"text"`
 }
 
 type DrawMsg = game.Circle
@@ -30,30 +30,28 @@ type DrawMsg = game.Circle
 type ChatMsg = game.Chat
 
 type BeginMsg struct {
-	NextWord   string
-	NextPlayer string
+	NextWord        string `json:"nextWord"`
+	NextPlayerIndex int    `json:"nextPlayerIndex"`
 }
 
 type FinishMsg struct {
-	BeginMsg      *BeginMsg
-	PrevPlayer    string
-	GuessScoreInc int
+	BeginMsg     *BeginMsg `json:"beginMsg"`
+	DrawScoreInc int       `json:"drawScoreInc"`
 }
 
 type PlayerMsg struct {
-	// ensures ordering of players on client and server are the same
-	PlayerIndex int
-	Player      string
+	PlayerIndex int         `json:"playerIndex"` // ensures ordering of players on client and server are the same
+	Player      game.Player `json:"player"`
 }
 
 type InputPayload struct {
-	Code int
-	Msg  json.RawMessage
+	Code int             `json:"code"`
+	Msg  json.RawMessage `json:"msg"`
 }
 
 type OutputPayload struct {
-	Code int
-	Msg  interface{}
+	Code int         `json:"code"`
+	Msg  interface{} `json:"msg"`
 }
 
 func SendErrMsg(ch chan []byte, errorDesc string) {

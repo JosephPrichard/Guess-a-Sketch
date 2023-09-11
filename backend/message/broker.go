@@ -11,6 +11,8 @@ import (
 
 type Subscriber = chan []byte
 
+type Player = game.Player
+
 type SentMsg struct {
 	Message []byte
 	Sender  Subscriber
@@ -18,7 +20,7 @@ type SentMsg struct {
 
 type SubscriberMsg struct {
 	Subscriber Subscriber
-	Player     string
+	Player     Player
 }
 
 type Broker struct {
@@ -28,7 +30,7 @@ type Broker struct {
 	ResetState  chan struct{}
 	Stop        chan struct{}
 	room        game.Room
-	subscribers map[Subscriber]string
+	subscribers map[Subscriber]Player
 	ExpireTime  atomic.Int64
 }
 
@@ -40,7 +42,7 @@ func NewBroker(code string, wordBank []string) *Broker {
 		SendMessage: make(chan SentMsg),
 		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
-		subscribers: make(map[Subscriber]string),
+		subscribers: make(map[Subscriber]Player),
 		room:        game.NewRoom(code, wordBank),
 	}
 	broker.PostponeExpiration()
@@ -132,6 +134,13 @@ func (broker *Broker) onResetState() {
 }
 
 func (broker *Broker) onStop() {
+	resp, err := HandleTimeoutMessage()
+	if err != nil {
+		log.Printf("Failed to serialize error for ws message")
+		return
+	}
+	broker.broadcast(resp)
+	// delete each subscriber from table and close channel
 	for s := range broker.subscribers {
 		delete(broker.subscribers, s)
 		close(s)

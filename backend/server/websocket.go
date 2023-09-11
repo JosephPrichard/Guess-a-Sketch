@@ -1,10 +1,12 @@
-package api
+package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"guessasketch/message"
 	"guessasketch/utils"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -15,26 +17,32 @@ type RoomCodeResp struct {
 	Code string
 }
 
-type WsServer struct {
-	upgrader     websocket.Upgrader
-	brokerage    *message.Brokerage
-	gameWordBank []string
+type WsServerConfig struct {
+	GameWordBank []string
+	AuthServer   *AuthServer
+	PlayerServer *PlayerServer
 }
 
-func NewWsServer(gameWordBank []string) *WsServer {
+type WsServer struct {
+	upgrader  websocket.Upgrader
+	brokerage *message.Brokerage
+	WsServerConfig
+}
+
+func NewWsServer(config WsServerConfig) *WsServer {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	return &WsServer{
-		upgrader:     upgrader,
-		brokerage:    message.NewBrokerMap(time.Minute),
-		gameWordBank: gameWordBank,
+		upgrader:       upgrader,
+		brokerage:      message.NewBrokerMap(time.Minute),
+		WsServerConfig: config,
 	}
 }
 
-func (controller *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
+func (server *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
@@ -45,10 +53,10 @@ func (controller *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	broker := message.NewBroker(code, controller.gameWordBank)
+	broker := message.NewBroker(code, server.GameWordBank)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
-	controller.brokerage.Store(code, broker)
+	server.brokerage.Store(code, broker)
 
 	roomCode := RoomCodeResp{Code: code}
 	b, err := json.Marshal(roomCode)
@@ -61,33 +69,51 @@ func (controller *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func (controller *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
+func guestName() string {
+	return fmt.Sprintf("Guest %d", 10+rand.Intn(89))
+}
+
+func (server *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
+
+	session, err := server.AuthServer.GetSession(w, r)
+	if err != nil {
+		resp := utils.ErrorMsg{Status: 401, ErrorDesc: err.Error()}
+		utils.SendErrResp(w, resp)
+		return
+	}
+	id := session.ID
 
 	query := r.URL.Query()
 	code := query.Get("code")
-	player := query.Get("name")
+	name := query.Get("name")
 
-	if len(player) > 15 {
+	if len(name) == 0 {
+		name = guestName()
+	}
+	if len(name) > 15 {
 		resp := utils.ErrorMsg{Status: 400, ErrorDesc: "Player name must be 15 or less characters"}
 		utils.SendErrResp(w, resp)
 		return
 	}
 
-	broker := controller.brokerage.Load(code)
+	broker := server.brokerage.Load(code)
 	if broker == nil {
 		resp := utils.ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
 		utils.SendErrResp(w, resp)
 		return
 	}
 
-	ws, err := controller.upgrader.Upgrade(w, r, nil)
+	ws, err := server.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
+	log.Printf("Joined room %s with name %s", code, name)
+
 	// create a new subscription channel and join the broker with it
+	player := message.Player{ID: id, Name: name}
 	subscriber := make(message.Subscriber)
 	broker.Subscribe <- message.SubscriberMsg{Subscriber: subscriber, Player: player}
 

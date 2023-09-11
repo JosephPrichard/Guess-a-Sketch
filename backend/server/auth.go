@@ -1,18 +1,12 @@
-package api
+package server
 
 import (
-	"guessasketch/utils"
 	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
-
-var jwtKey = utils.GetEnvVar("JWT_SECRET_KEY")
-var keyFunc = func(token *jwt.Token) (interface{}, error) {
-	return jwtKey, nil
-}
 
 type Session struct {
 	ID    string
@@ -34,13 +28,25 @@ func GuestSession() Session {
 	return session
 }
 
-func SetSession(w http.ResponseWriter, session Session) error {
+type AuthServer struct {
+	jwtKey string
+}
+
+func NewAuthServer(jwtKey string) *AuthServer {
+	return &AuthServer{jwtKey}
+}
+
+func (server *AuthServer) keyFunc(token *jwt.Token) (interface{}, error) {
+	return server.jwtKey, nil
+}
+
+func (server *AuthServer) SetSession(w http.ResponseWriter, session Session) error {
 	expiry := time.Now().Add(24 * time.Hour)
 
 	session.ExpiresAt = jwt.NewNumericDate(expiry)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, session)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(server.jwtKey)
 	if err != nil {
 		return err
 	}
@@ -54,12 +60,12 @@ func SetSession(w http.ResponseWriter, session Session) error {
 	return nil
 }
 
-func GetSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
+func (server *AuthServer) GetSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
 	cookie, err := r.Cookie("session")
 
 	var session Session
 	if cookie != nil && err == nil {
-		token, err := jwt.ParseWithClaims(cookie.Value, &session, keyFunc)
+		token, err := jwt.ParseWithClaims(cookie.Value, &session, server.keyFunc)
 		if err != nil {
 			return nil, err
 		}
@@ -71,11 +77,8 @@ func GetSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
 		session = GuestSession()
 	}
 
-	SetSession(w, session)
+	server.SetSession(w, session)
 	return &session, nil
-}
-
-type AuthServer struct {
 }
 
 func (server *AuthServer) Login(w http.ResponseWriter, r *http.Request) {

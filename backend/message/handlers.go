@@ -22,7 +22,7 @@ const (
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
 var ErrMarshal = errors.New("Failed to marshal output data")
 
-func HandleMessage(broker *Broker, message []byte, player string) ([]byte, error) {
+func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error) {
 	// deserialize payload message from json
 	var payload InputPayload
 	err := json.Unmarshal(message, &payload)
@@ -33,17 +33,14 @@ func HandleMessage(broker *Broker, message []byte, player string) ([]byte, error
 	log.Printf("Handling message code %d", payload.Code)
 
 	switch payload.Code {
-	case OptionsCode:
+	case StartCode:
 		log.Printf("Handling message type options")
-		var inputMsg OptionsMsg
+		var inputMsg StartMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return nil, ErrUnMarshal
 		}
-		return handleOptionsMessage(&broker.room, inputMsg, player)
-	case StartCode:
-		log.Printf("Handling message type start")
-		return handleStartMessage(broker, player)
+		return handleStartMessage(broker, inputMsg, player)
 	case TextCode:
 		log.Printf("Handling message type text")
 		var inputMsg TextMsg
@@ -66,35 +63,41 @@ func HandleMessage(broker *Broker, message []byte, player string) ([]byte, error
 	}
 }
 
-func handleOptionsMessage(room *game.Room, msg OptionsMsg, player string) ([]byte, error) {
-	if room.PlayerIsNotHost(player) {
-		return nil, errors.New("Player must be the host to change the game options")
+func handleStartMessage(broker *Broker, msg StartMsg, player Player) ([]byte, error) {
+	err := handleRoomSettings(&broker.room, msg, player)
+	if err != nil {
+		return nil, err
 	}
-	if room.Stage != game.Lobby {
-		return nil, errors.New("Cannot modify options for a game after it starts")
-	}
-	if len(msg.WordBank) < MinPlayerLimit && len(msg.WordBank) != 0 {
-		return nil, fmt.Errorf("Word bank must have at least %d words", MinWordBank)
-	}
-	if (msg.TimeLimitSecs < MinTimeLimit || msg.TimeLimitSecs > MaxPlayerLimit) && msg.TimeLimitSecs != 0 {
-		return nil, fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
-	}
-	if (msg.PlayerLimit < MinPlayerLimit || msg.PlayerLimit > MaxPlayerLimit) && msg.PlayerLimit != 0 {
-		return nil, fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
-	}
-	if msg.PlayerLimit < len(room.Players) && msg.PlayerLimit != 0 {
-		return nil, errors.New("Cannot reduce player limit lower than number of players currently in the room")
-	}
-	if msg.TotalRounds > MaxTotalRounds && msg.TotalRounds != 0 {
-		return nil, fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
-	}
-	room.Settings.UpdateSettings(msg)
-
-	payload := OutputPayload{Code: OptionsCode, Msg: msg}
-	return marshalPayload(payload)
+	return handleStartGame(broker, player)
 }
 
-func handleStartMessage(broker *Broker, player string) ([]byte, error) {
+func handleRoomSettings(room *game.Room, msg StartMsg, player Player) error {
+	if room.PlayerIsNotHost(player) {
+		return errors.New("Player must be the host to change the game options")
+	}
+	if room.Stage != game.Lobby {
+		return errors.New("Cannot modify options for a game after it starts")
+	}
+	if len(msg.CustomWordBank) < MinPlayerLimit {
+		return fmt.Errorf("Word bank must have at least %d words", MinWordBank)
+	}
+	if msg.TimeLimitSecs < MinTimeLimit || msg.TimeLimitSecs > MaxPlayerLimit {
+		return fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
+	}
+	if msg.PlayerLimit < MinPlayerLimit || msg.PlayerLimit > MaxPlayerLimit{
+		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+	}
+	if msg.PlayerLimit < len(room.Players) {
+		return errors.New("Cannot reduce player limit lower than number of players currently in the room")
+	}
+	if msg.TotalRounds > MaxTotalRounds {
+		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+	}
+	room.Settings = msg
+	return nil
+}
+
+func handleStartGame(broker *Broker, player Player) ([]byte, error) {
 	room := &broker.room
 
 	if room.PlayerIsNotHost(player) {
@@ -110,14 +113,14 @@ func handleStartMessage(broker *Broker, player string) ([]byte, error) {
 	broker.PostponeExpiration()
 
 	beginMsg := BeginMsg{
-		NextWord:   room.Turn.CurrWord,
-		NextPlayer: room.GetCurrPlayer(),
+		NextWord:        room.Turn.CurrWord,
+		NextPlayerIndex: room.Turn.CurrPlayerIndex,
 	}
-	payload := OutputPayload{Code: BeginCode, Msg: beginMsg}
+	payload := OutputPayload{Code: StartCode, Msg: beginMsg}
 	return marshalPayload(payload)
 }
 
-func handleTextMessage(room *game.Room, msg TextMsg, player string) ([]byte, error) {
+func handleTextMessage(room *game.Room, msg TextMsg, player Player) ([]byte, error) {
 	text := msg.Text
 	if len(text) > MaxChatLen || len(text) < MinChatLen {
 		return nil, fmt.Errorf("Chat message must be less than %d characters in length and more than %d", MaxChatLen, MinChatLen)
@@ -141,11 +144,11 @@ func handleTextMessage(room *game.Room, msg TextMsg, player string) ([]byte, err
 }
 
 // color, radius, x, and y are unvalidated fields for performance
-func handleDrawMessage(room *game.Room, msg DrawMsg, player string) ([]byte, error) {
+func handleDrawMessage(room *game.Room, msg DrawMsg, player Player) ([]byte, error) {
 	if room.Stage != game.Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
-	if player != room.GetCurrPlayer() {
+	if player.ID != room.GetCurrPlayer().ID {
 		return nil, errors.New("Player cannot draw on the canvas")
 	}
 
@@ -155,7 +158,7 @@ func handleDrawMessage(room *game.Room, msg DrawMsg, player string) ([]byte, err
 	return marshalPayload(payload)
 }
 
-func HandleJoin(room *game.Room, player string) ([]byte, error) {
+func HandleJoin(room *game.Room, player game.Player) ([]byte, error) {
 	err := room.Join(player)
 	if err != nil {
 		return nil, err
@@ -171,7 +174,7 @@ func HandleJoin(room *game.Room, player string) ([]byte, error) {
 	return marshalPayload(payload)
 }
 
-func HandleLeave(room *game.Room, player string) ([]byte, error) {
+func HandleLeave(room *game.Room, player Player) ([]byte, error) {
 	leaveIndex := room.Leave(player)
 	if leaveIndex < 0 {
 		return nil, errors.New("Failed to leave the room, player couldn't be found")
@@ -192,7 +195,6 @@ func HandleReset(broker *Broker) ([]byte, error) {
 
 	broker.PostponeExpiration()
 
-	prevPlayer := room.GetCurrPlayer()
 	scoreInc := room.OnResetScoreInc()
 
 	var beginMsg *BeginMsg = nil
@@ -201,19 +203,23 @@ func HandleReset(broker *Broker) ([]byte, error) {
 		broker.StartResetTimer(room.Settings.TimeLimitSecs)
 
 		beginMsg = &BeginMsg{
-			NextWord:   room.Turn.CurrWord,
-			NextPlayer: room.GetCurrPlayer(),
+			NextWord:        room.Turn.CurrWord,
+			NextPlayerIndex: room.Turn.CurrPlayerIndex,
 		}
 	} else {
 		room.FinishGame()
 	}
 
 	finishMsg := FinishMsg{
-		BeginMsg:      beginMsg,
-		PrevPlayer:    prevPlayer,
-		GuessScoreInc: scoreInc,
+		BeginMsg:        beginMsg,
+		DrawScoreInc:    scoreInc,
 	}
 	payload := OutputPayload{Code: FinishCode, Msg: finishMsg}
+	return marshalPayload(payload)
+}
+
+func HandleTimeoutMessage() ([]byte, error) {
+	payload := OutputPayload{Code:TimeoutCode}
 	return marshalPayload(payload)
 }
 
