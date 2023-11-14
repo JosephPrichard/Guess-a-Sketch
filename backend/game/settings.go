@@ -6,7 +6,7 @@ type RoomSettings struct {
 	TimeLimitSecs  int      `json:"timeLimitSecs"`  // time given for guessing each turn
 	CustomWordBank []string `json:"customWordBank"` // custom words added in the bank by host
 	SharedWordBank []string `json:"-"`              // reference to the shared word bank
-	IsPublic       bool     `json:"isPublic"`       // whether the room is publicly accessible of nor
+	IsPublic       bool     `json:"isPublic"`       // whether the room is publicly accessible of not
 }
 
 func SettingsWithDefaults(settings *RoomSettings) {

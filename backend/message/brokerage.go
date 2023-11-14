@@ -8,82 +8,81 @@ import (
 )
 
 type Brokerage struct {
-	// sync map to store the brokers themselves - allows for parallel iteration, etc
-	brokers sync.Map
-	// mutex and a slice to store list of codes - protected with a mutex
-	mu    sync.Mutex
-	codes []string
+	m     map[string]*Broker // maps codes to brokers
+	codes []string           // stores the codes of the brokers with older brokers last
+	mu    sync.Mutex         // used to synchronize both structures
 }
 
 func NewBrokerMap(period time.Duration) *Brokerage {
 	brokerage := &Brokerage{
+		m:     make(map[string]*Broker),
 		codes: make([]string, 0),
 	}
 	go brokerage.startCleanup(period)
 	return brokerage
 }
 
-func (brokerage *Brokerage) delete(code string, broker *Broker) {
-	log.Printf("Deleting broker with code %s", code)
-
-	broker.Stop <- struct{}{}
-	brokerage.brokers.Delete(code)
-
-	// linear search to find a code to remove, then remove it
-	brokerage.mu.Lock()
-	for i, c := range brokerage.codes {
-		if c == code {
-			brokerage.codes = utils.Remove(brokerage.codes, i)
-		}
-	}
-	brokerage.mu.Unlock()
-}
-
 func (brokerage *Brokerage) Load(code string) *Broker {
-	v, ok := brokerage.brokers.Load(code)
-	if !ok {
-		return nil
-	}
-	broker := v.(*Broker)
-	// check if this key has expired already
-	if broker.IsExpired(time.Now()) {
-		brokerage.delete(code, broker)
+	brokerage.mu.Lock()
+	defer brokerage.mu.Unlock()
+
+	broker, ok := brokerage.m[code]
+	if !ok || broker.IsExpired(time.Now()) {
 		return nil
 	}
 	return broker
 }
 
-func (brokerage *Brokerage) Store(code string, broker *Broker, isPublic bool) {
-	brokerage.brokers.Store(code, broker)
+func (brokerage *Brokerage) Store(code string, broker *Broker) {
+	brokerage.mu.Lock()
+	defer brokerage.mu.Unlock()
 
-	// only add codes for public brokers into the list of all codes
-	if isPublic {
-		brokerage.mu.Lock()
+	brokerage.m[code] = broker
+	// only add codes for public m into the list of all codes
+	if broker.IsPublic {
 		brokerage.codes = append(brokerage.codes, code)
-		brokerage.mu.Unlock()
 	}
 }
 
-func (brokerage *Brokerage) Codes() []string {
-	codes := make([]string, 0)
+func (brokerage *Brokerage) Codes(offset int, limit int) []string {
 	brokerage.mu.Lock()
-	for _, c := range brokerage.codes {
+	defer brokerage.mu.Unlock()
+
+	codes := make([]string, 0)
+	upperLimit := utils.Min(offset+limit, len(brokerage.codes))
+	for i := offset; i < upperLimit; i++ {
+		c := brokerage.codes[i]
 		codes = append(codes, c)
 	}
-	brokerage.mu.Unlock()
 	return codes
+}
+
+func (brokerage *Brokerage) purgeExpired(now time.Time) {
+	brokerage.mu.Lock()
+	defer brokerage.mu.Unlock()
+
+	expiredCodes := make(map[string]bool)
+	for code, broker := range brokerage.m {
+		// check if this broker has expired already, if so delete it
+		if broker.IsExpired(now) {
+			log.Printf("Deleting broker for code %s", code)
+			broker.Stop <- struct{}{}
+			delete(brokerage.m, code)
+			expiredCodes[code] = true
+		}
+	}
+	for i, code := range brokerage.codes {
+		_, expired := expiredCodes[code]
+		if expired {
+			brokerage.codes = utils.Remove(brokerage.codes, i)
+		}
+	}
 }
 
 func (brokerage *Brokerage) startCleanup(period time.Duration) {
 	// periodically cleanup expired keys from the map
 	for now := range time.NewTicker(period).C {
-		brokerage.brokers.Range(func(key, value any) bool {
-			broker := value.(*Broker)
-			// check if this broker has expired already
-			if broker.IsExpired(now) {
-				brokerage.delete(key.(string), broker)
-			}
-			return true
-		})
+		log.Println("Puring expired records in brokerage")
+		brokerage.purgeExpired(now)
 	}
 }

@@ -31,7 +31,8 @@ type Broker struct {
 	Stop        chan struct{}
 	room        game.Room
 	subscribers map[Subscriber]Player
-	ExpireTime  atomic.Int64
+	expireTime  atomic.Int64
+	IsPublic    bool
 }
 
 func NewBroker(code string, settings game.RoomSettings) *Broker {
@@ -44,6 +45,7 @@ func NewBroker(code string, settings game.RoomSettings) *Broker {
 		Stop:        make(chan struct{}),
 		subscribers: make(map[Subscriber]Player),
 		room:        game.NewRoom(code, settings),
+		IsPublic:    settings.IsPublic,
 	}
 	broker.PostponeExpiration()
 	return broker
@@ -51,14 +53,11 @@ func NewBroker(code string, settings game.RoomSettings) *Broker {
 
 func (broker *Broker) PostponeExpiration() {
 	// set the expiration time for 15 minutes
-	broker.ExpireTime.Store(time.Now().Unix() + 15*60)
+	broker.expireTime.Store(time.Now().Unix() + 15*60)
 }
 
 func (broker *Broker) IsExpired(now time.Time) bool {
-	n := now.Unix()
-	e := broker.ExpireTime.Load()
-	//log.Printf("Expiring %d and, now is %d, remaining time is %d", n, e, -(n - e))
-	return n >= e
+	return now.Unix() >= broker.expireTime.Load()
 }
 
 func (broker *Broker) StartResetTimer(timeSecs int) {

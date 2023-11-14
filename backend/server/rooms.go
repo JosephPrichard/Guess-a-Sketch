@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -47,10 +48,24 @@ func NewRoomsServer(config RoomsServerConfig) *RoomsServer {
 	}
 }
 
-func (server *RoomsServer) Rooms(w http.ResponseWriter, _ *http.Request) {
+func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
-	rooms := server.brokerage.Codes()
+	query := r.URL.Query()
+	offsetStr := query.Get("offsetStr")
+	offset := 0
+
+	if offsetStr != "" {
+		parsedOffset, err := strconv.ParseInt(offsetStr, 10, 32)
+		if err != nil {
+			resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Offset  parameters must be a 32-bit integer"}
+			utils.WriteError(w, resp)
+			return
+		}
+		offset = int(parsedOffset)
+	}
+
+	rooms := server.brokerage.Codes(offset, 20)
 	w.WriteHeader(http.StatusOK)
 	utils.WriteJson(w, rooms)
 }
@@ -87,7 +102,7 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	broker := message.NewBroker(code, settings)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
-	server.brokerage.Store(code, broker, settings.IsPublic)
+	server.brokerage.Store(code, broker)
 
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
@@ -150,12 +165,9 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 // reads messages from socket and sends them to broker
 func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber message.Subscriber) {
 	defer func() {
+		// unsubscribes from the broker then closes the websocket connection if the client closes connection
 		broker.Unsubscribe <- subscriber
-		err := ws.Close()
-		if err != nil {
-			log.Println("Failed to close a websocket conn")
-			return
-		}
+		_ = ws.Close()
 		log.Printf("Socket listener close function called")
 		if panicInfo := recover(); panicInfo != nil {
 			log.Println(panicInfo)
@@ -175,12 +187,9 @@ func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber messa
 // reads messages from a subscribed channel and sends them to socket
 func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 	defer func() {
-		err := ws.Close()
-		if err != nil {
-			log.Println("Failed to close a websocket conn")
-			return
-		}
+		// closes the websocket connection when the subscriber is informed no more messages will be sent
 		log.Println("Subscriber channel was closed")
+		_ = ws.Close()
 		if panicInfo := recover(); panicInfo != nil {
 			log.Println(panicInfo)
 		}
@@ -189,7 +198,7 @@ func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 		// read values from channel and write back to socket
 		err := ws.WriteMessage(websocket.TextMessage, resp)
 		if err != nil {
-			log.Printf("WriteError writing message %s", err)
+			log.Printf("Error writing message %s", err)
 			return
 		}
 	}
