@@ -55,10 +55,10 @@ type OutputPayload struct {
 }
 
 func SendErrMsg(ch chan []byte, errorDesc string) {
-	msg := utils.ErrorMsg{ErrorDesc: errorDesc}
+	msg := utils.ErrorResp{ErrorDesc: errorDesc}
 	b, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("Failed to serialize error for ws message")
+		log.Println("Failed to serialize error for ws message")
 		return
 	}
 	ch <- b

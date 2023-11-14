@@ -34,7 +34,7 @@ type Broker struct {
 	ExpireTime  atomic.Int64
 }
 
-func NewBroker(code string, wordBank []string) *Broker {
+func NewBroker(code string, settings game.RoomSettings) *Broker {
 	// create the broker with all channels and state
 	broker := &Broker{
 		Subscribe:   make(chan SubscriberMsg),
@@ -43,19 +43,22 @@ func NewBroker(code string, wordBank []string) *Broker {
 		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
 		subscribers: make(map[Subscriber]Player),
-		room:        game.NewRoom(code, wordBank),
+		room:        game.NewRoom(code, settings),
 	}
 	broker.PostponeExpiration()
 	return broker
 }
 
-func (room *Broker) PostponeExpiration() {
+func (broker *Broker) PostponeExpiration() {
 	// set the expiration time for 15 minutes
-	room.ExpireTime.Store(time.Now().Unix() + 15*60)
+	broker.ExpireTime.Store(time.Now().Unix() + 15*60)
 }
 
 func (broker *Broker) IsExpired(now time.Time) bool {
-	return now.Unix() > broker.ExpireTime.Load()
+	n := now.Unix()
+	e := broker.ExpireTime.Load()
+	//log.Printf("Expiring %d and, now is %d, remaining time is %d", n, e, -(n - e))
+	return n >= e
 }
 
 func (broker *Broker) StartResetTimer(timeSecs int) {
@@ -79,7 +82,7 @@ func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {
 		close(subMsg.Subscriber)
 		return
 	}
-	log.Printf("User subscribed to the broker")
+	log.Println("User subscribed to the broker")
 
 	broker.subscribers[subMsg.Subscriber] = subMsg.Player
 
@@ -95,7 +98,7 @@ func (broker *Broker) onUnsubscribe(subscriber Subscriber) {
 		SendErrMsg(subscriber, err.Error())
 		return
 	}
-	log.Printf("User unsubscribed from the broker")
+	log.Println("User unsubscribed from the broker")
 
 	delete(broker.subscribers, subscriber)
 	close(subscriber)
@@ -117,14 +120,14 @@ func (broker *Broker) onMessage(sentMsg SentMsg) {
 }
 
 func (broker *Broker) onResetState() {
-	// reset the game and get a response, then handle the error cose
+	// reset the game and get a response, then handle the error case
 	resp, err := HandleReset(broker)
 	if err != nil {
 		// if an error does exist, serialize it and replace the success message with it
-		errMsg := utils.ErrorMsg{ErrorDesc: err.Error()}
+		errMsg := utils.ErrorResp{ErrorDesc: err.Error()}
 		b, err := json.Marshal(errMsg)
 		if err != nil {
-			log.Printf("Failed to serialize error for ws message")
+			log.Println("Failed to serialize error for ws message")
 			return
 		}
 		resp = b
@@ -136,7 +139,7 @@ func (broker *Broker) onResetState() {
 func (broker *Broker) onStop() {
 	resp, err := HandleTimeoutMessage()
 	if err != nil {
-		log.Printf("Failed to serialize error for ws message")
+		log.Println("Failed to serialize error for ws message")
 		return
 	}
 	broker.broadcast(resp)

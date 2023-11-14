@@ -1,0 +1,42 @@
+.PublicRooms {
+    margin-top: 50px;
+}
+
+.PublicRoom {
+    display: flex;
+    font-size: 22px;
+    padding-left: 20px;
+    padding-right: 20px;
+    font-weight: bold;
+    outline: none;
+    line-height: 16px;
+    border: 0;
+    background-color: rgb(230,230,230);
+    border-radius: 6px;
+    font-family: 'Roboto', sans-serif;
+    color: rgb(120,120,120);
+    margin: 10px 0 auto;
+    justify-content: space-between;
+}
+
+.RoomCode {
+    padding-top: 20px;
+    padding-bottom: 20px;
+    text-align: left;
+}
+
+.RoomButtonWrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: -5px;
+}
+
+.RoomButton {
+    width: 60px;
+    margin: auto;
+    display: inline-block;
+    height: 30px;
+    line-height: 15px;
+    font-size: 14px;
+}

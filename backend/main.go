@@ -24,21 +24,22 @@ func main() {
 	log.Println("Env vars", envVars)
 
 	rand.Seed(time.Now().UnixNano())
-	log.Printf("Started the server...")
+	log.Println("Started the server...")
 
 	gameWordBank := strings.Split(words, "\n")
 
 	authServer := server.NewAuthServer(envVars["JWT_SECRET_KEY"])
 	playerServer := server.NewPlayerServer(nil)
-	wsServerConfig := server.WsServerConfig{
-		GameWordBank: gameWordBank, 
-		AuthServer: authServer, 
+	wsServerConfig := server.RoomsServerConfig{
+		GameWordBank: gameWordBank,
+		AuthServer:   authServer,
 		PlayerServer: playerServer,
 	}
-	wsServer := server.NewWsServer(wsServerConfig)
+	roomsServer := server.NewRoomsServer(wsServerConfig)
 
-	http.HandleFunc("/rooms/create", wsServer.CreateRoom)
-	http.HandleFunc("/rooms/join", wsServer.JoinRoom)
+	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
+	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)
+	http.HandleFunc("/rooms", roomsServer.Rooms)
 	http.HandleFunc("/players/stats", playerServer.Get)
 	http.HandleFunc("/players/leaderboard", playerServer.Leaderboard)
 	http.HandleFunc("/login", authServer.Login)

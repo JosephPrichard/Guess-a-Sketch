@@ -1,0 +1,25 @@
+.ScoreBoard {
+    width: 100%;
+    color: rgb(60,60,60);
+}
+
+.ScoreBoardLeft {
+    text-align: left;
+}
+
+.ScoreBoardRight {
+    text-align: right;
+}
+
+.Score {
+    line-height: 45px;
+    text-align: left;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-bottom: solid 1px rgb(220,220,220);
+    font-weight: bold;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    display: flex;
+    justify-content: space-between;
+}

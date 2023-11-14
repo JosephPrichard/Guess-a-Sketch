@@ -1,9 +1,11 @@
 import { createSignal } from "solid-js";
 import "./TopBar.css"
-import { RoomProps } from "../../pages/room/Room";
-import { FINISH_CODE } from "../../pages/room/messages";
+import { RoomProps } from "../pages/Room";
+import { FINISH_CODE } from "../pages/messages";
 
-const TopBar = ({ room }: RoomProps) => {
+type Props = RoomProps & { code: string };
+
+const TopBar = ({ room, code }: Props) => {
     const [time, setTime] = createSignal(0);
     const [word, setWord] = createSignal("Word");
     const [round, setRound] = createSignal(1);
@@ -14,15 +16,15 @@ const TopBar = ({ room }: RoomProps) => {
     });
 
     return (
-        <div class="Panel TopBar">
-            <span class="TopElement TopBarLeft">
-                {time()}
+        <div class="TopBar">
+            <span class="TopBarLeft">
+                Round {round()}/{totalRounds()}
             </span>
-            <span class="TopElement">
-                {word()}
+            <span>
+                Guessing {word()}
             </span>
-            <span class="TopElement TopBarRight">
-                {round()}/{totalRounds()}
+            <span class="TopBarRight">
+                {time()} seconds
             </span>
         </div>
     );

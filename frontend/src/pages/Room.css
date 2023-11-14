@@ -1,0 +1,50 @@
+.Base {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    background-color: rgb(220,220,220);
+}
+
+.Wrapper {
+    display: flex;
+    height: calc(100% - 45px);
+    width: 100%;
+}
+
+.Middle {
+    background-color: whitesmoke;
+    margin-left: auto;
+    margin-right: auto;
+    width: fit-content;
+    box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);
+}
+
+.Sidebar {
+    background-color: whitesmoke;
+    width: 20%;
+    height: 100%;
+    box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);
+    display: flex;
+    flex-direction: column;
+}
+
+.StatusInfo {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 30px;
+    padding: 40px;
+    width: 100%;
+    background-color: #3a86ff;
+    color: whitesmoke;
+    border-radius: 5px;
+}

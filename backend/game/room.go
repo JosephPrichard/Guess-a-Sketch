@@ -26,26 +26,24 @@ type Chat struct {
 }
 
 type Room struct {
-	Code           string         `json:"code"`       // code of the room that uniquely identifies it
-	CurrRound      int            `json:"currRound"`  // the current round
-	Players        []Player       `json:"players"`    // stores all players in the order they joined in
-	ScoreBoard     map[string]int `json:"scoreBoard"` // maps player IDs to scores
-	ChatLog        []Chat         `json:"chatLog"`    // stores the chat log
-	Stage          int            `json:"stage"`      // the current stage the room is
-	Settings       RoomSettings   `json:"settings"`   // settings for the room set before game starts
-	Turn           GameTurn       `json:"turn"`       // stores the current game turn
-	sharedWordBank []string       // reference to the shared wordbank
+	Code       string         `json:"code"`       // code of the room that uniquely identifies it
+	CurrRound  int            `json:"currRound"`  // the current round
+	Players    []Player       `json:"players"`    // stores all players in the order they joined in
+	ScoreBoard map[string]int `json:"scoreBoard"` // maps player IDs to scores
+	ChatLog    []Chat         `json:"chatLog"`    // stores the chat log
+	Stage      int            `json:"stage"`      // the current stage the room is
+	Settings   RoomSettings   `json:"settings"`   // settings for the room set before game starts
+	Turn       GameTurn       `json:"turn"`       // stores the current game turn
 }
 
-func NewRoom(code string, sharedWordBank []string) Room {
+func NewRoom(code string, settings RoomSettings) Room {
 	return Room{
-		Code:           code,
-		Players:        make([]Player, 0),
-		ScoreBoard:     make(map[string]int),
-		ChatLog:        make([]Chat, 0),
-		sharedWordBank: sharedWordBank,
-		Settings:       NewRoomSettings(),
-		Turn:           NewGameTurn(),
+		Code:       code,
+		Players:    make([]Player, 0),
+		ScoreBoard: make(map[string]int),
+		ChatLog:    make([]Chat, 0),
+		Settings:   settings,
+		Turn:       NewGameTurn(),
 	}
 }
 
@@ -63,7 +61,7 @@ func (room *Room) PlayerIsNotHost(player Player) bool {
 func (room *Room) ToMessage() []byte {
 	b, err := json.Marshal(room)
 	if err != nil {
-		log.Printf(err.Error())
+		log.Println(err.Error())
 		return []byte{}
 	}
 	return b
@@ -124,9 +122,10 @@ func (room *Room) FinishGame() {
 
 func (room *Room) setNextWord() {
 	// pick a new word from the shared or custom word bank
-	index := rand.Intn(len(room.sharedWordBank) + len(room.Settings.CustomWordBank))
-	if index < len(room.sharedWordBank) {
-		room.Turn.CurrWord = room.sharedWordBank[index]
+
+	index := rand.Intn(len(room.Settings.SharedWordBank) + len(room.Settings.CustomWordBank))
+	if index < len(room.Settings.SharedWordBank) {
+		room.Turn.CurrWord = room.Settings.SharedWordBank[index]
 	} else {
 		room.Turn.CurrWord = room.Settings.CustomWordBank[index]
 	}

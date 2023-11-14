@@ -1,0 +1,30 @@
+.TopBar {
+    font-family: 'Bebas Neue', sans-serif;
+    color: whitesmoke;
+    font-size: 25px;
+    background-color: #3a86ff;
+    height: 45px;
+    width: 100%;
+    line-height: 45px;
+    display: flex;
+    justify-content: space-between;
+    box-shadow: 7px 6px 13px -2px rgba(166,166,166,0.75);
+}
+
+.TopBarLeft {
+    padding-left: 10%;
+}
+
+.TopBarRight {
+    margin-right: 10%;
+}
+
+.Time {
+    background-color: whitesmoke;
+    color: #3a86ff;
+    margin-left: 20px;
+    margin-right: 20px;
+    border-radius: 50%;
+    height: 25px;
+    width: 50px;
+}

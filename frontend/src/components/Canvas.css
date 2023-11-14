@@ -1,12 +1,13 @@
 .Canvas {
     padding: 0;
-    margin-right: 10px;
+    margin: auto;
 }
 
 .Easel {
     height: 30px;
     text-align: left;
-    margin-left: 10px;
+    margin-left: 5px;
+    margin-right: 5px;
 }
 
 .InnerSize {
@@ -20,7 +21,7 @@
 }
 
 .ColorTile {
-    border-radius: 50%;
+    border-radius: 5px;
     border: 1px solid black;
     display: inline-block;
     width: 25px;

@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"guessasketch/game"
 	"guessasketch/message"
 	"guessasketch/utils"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,72 +16,95 @@ import (
 )
 
 type RoomCodeResp struct {
-	Code string
+	Code     string
+	Settings game.RoomSettings
 }
 
-type WsServerConfig struct {
+type RoomsServerConfig struct {
 	GameWordBank []string
 	AuthServer   *AuthServer
 	PlayerServer *PlayerServer
 }
 
-type WsServer struct {
+type RoomsServer struct {
 	upgrader  websocket.Upgrader
 	brokerage *message.Brokerage
-	WsServerConfig
+	RoomsServerConfig
 }
 
-func NewWsServer(config WsServerConfig) *WsServer {
+func NewRoomsServer(config RoomsServerConfig) *RoomsServer {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
-	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	return &WsServer{
-		upgrader:       upgrader,
-		brokerage:      message.NewBrokerMap(time.Minute),
-		WsServerConfig: config,
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return true
+	}
+	return &RoomsServer{
+		upgrader:          upgrader,
+		brokerage:         message.NewBrokerMap(time.Minute),
+		RoomsServerConfig: config,
 	}
 }
 
-func (server *WsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
+func (server *RoomsServer) Rooms(w http.ResponseWriter, _ *http.Request) {
+	utils.EnableCors(&w)
+
+	rooms := server.brokerage.Codes()
+	w.WriteHeader(http.StatusOK)
+	utils.WriteJson(w, rooms)
+}
+
+func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
 	code, err := utils.GenerateCode(8)
 	if err != nil {
-		resp := utils.ErrorMsg{Status: 500, ErrorDesc: "Failed to generate a valid error code"}
-		utils.SendErrResp(w, resp)
+		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to generate a valid error code"}
+		utils.WriteError(w, resp)
 		return
 	}
 
-	broker := message.NewBroker(code, server.GameWordBank)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to read data from request body"}
+		utils.WriteError(w, resp)
+		return
+	}
+
+	var settings game.RoomSettings
+	err = json.Unmarshal(body, &settings)
+	if err != nil {
+		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Invalid format for settings"}
+		utils.WriteError(w, resp)
+		return
+	}
+
+	game.SettingsWithDefaults(&settings)
+	settings.SharedWordBank = server.GameWordBank
+
+	broker := message.NewBroker(code, settings)
 	log.Printf("Starting a broker for code %s", code)
 	go broker.Start()
-	server.brokerage.Store(code, broker)
+	server.brokerage.Store(code, broker, settings.IsPublic)
 
-	roomCode := RoomCodeResp{Code: code}
-	b, err := json.Marshal(roomCode)
-	if err != nil {
-		log.Printf("Failed to serialize create room code response")
-		return
-	}
-
-	w.WriteHeader(200)
-	w.Write(b)
+	roomCode := RoomCodeResp{Code: code, Settings: settings}
+	w.WriteHeader(http.StatusOK)
+	utils.WriteJson(w, roomCode)
 }
 
 func guestName() string {
 	return fmt.Sprintf("Guest %d", 10+rand.Intn(89))
 }
 
-func (server *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
+func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	session, err := server.AuthServer.GetSession(w, r)
 	if err != nil {
-		resp := utils.ErrorMsg{Status: 401, ErrorDesc: err.Error()}
-		utils.SendErrResp(w, resp)
+		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: err.Error()}
+		utils.WriteError(w, resp)
 		return
 	}
 	id := session.ID
@@ -92,21 +117,22 @@ func (server *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		name = guestName()
 	}
 	if len(name) > 15 {
-		resp := utils.ErrorMsg{Status: 400, ErrorDesc: "Player name must be 15 or less characters"}
-		utils.SendErrResp(w, resp)
+		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Player name must be 15 or less characters"}
+		utils.WriteError(w, resp)
 		return
 	}
 
 	broker := server.brokerage.Load(code)
 	if broker == nil {
-		resp := utils.ErrorMsg{Status: 404, ErrorDesc: "Cannot find room for provided code"}
-		utils.SendErrResp(w, resp)
+		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Cannot find room for provided code"}
+		utils.WriteError(w, resp)
 		return
 	}
 
 	ws, err := server.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to upgrade to websocket"}
+		utils.WriteError(w, resp)
 		return
 	}
 
@@ -125,7 +151,11 @@ func (server *WsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber message.Subscriber) {
 	defer func() {
 		broker.Unsubscribe <- subscriber
-		ws.Close()
+		err := ws.Close()
+		if err != nil {
+			log.Println("Failed to close a websocket conn")
+			return
+		}
 		log.Printf("Socket listener close function called")
 		if panicInfo := recover(); panicInfo != nil {
 			log.Println(panicInfo)
@@ -145,8 +175,12 @@ func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber messa
 // reads messages from a subscribed channel and sends them to socket
 func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 	defer func() {
-		ws.Close()
-		log.Printf("Subscriber channel was closed")
+		err := ws.Close()
+		if err != nil {
+			log.Println("Failed to close a websocket conn")
+			return
+		}
+		log.Println("Subscriber channel was closed")
 		if panicInfo := recover(); panicInfo != nil {
 			log.Println(panicInfo)
 		}
@@ -155,7 +189,7 @@ func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 		// read values from channel and write back to socket
 		err := ws.WriteMessage(websocket.TextMessage, resp)
 		if err != nil {
-			log.Printf("Error writing message %s", err)
+			log.Printf("WriteError writing message %s", err)
 			return
 		}
 	}

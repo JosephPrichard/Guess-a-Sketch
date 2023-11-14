@@ -1,7 +1,7 @@
 import "./Canvas.css";
 import { Index, createSignal, onMount } from "solid-js";
-import { RoomProps } from "../../pages/room/Room";
-import { DRAW_CODE } from "../../pages/room/messages";
+import { RoomProps } from "../pages/Room";
+import { DRAW_CODE } from "../pages/messages";
 
 const COLORS = [
     "black", "white", "grey", "red", "orange", "yellow", "lime", 
@@ -12,13 +12,13 @@ const SIZES = [4, 6, 8, 12, 16, 20];
 interface Point { 
     x: number; 
     y: number;
-};
+}
 
 function drawCircle(ctx: CanvasRenderingContext2D, radius: number, point: Point) {
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
     ctx.fill();
-};
+}
 
 function interpolate(ctx: CanvasRenderingContext2D, radius: number, from: Point, to: Point) {
     const xDiff = to.x - from.x;
@@ -74,11 +74,14 @@ const Canvas = ({ room }: RoomProps) => {
     });
 
     return (
-        <div class="Panel Canvas">
+        <div class="Canvas">
             <canvas 
                 ref={setCanvasRef} 
-                width="700"
-                height="380"
+                width="1200"
+                height="1200"
+                style={{
+                    height: "calc(100vh - 50px - 30px)"
+                }}
                 onmousemove={(e) => {
                     if (isDrawing()) {
                         onDrawEvent(e);

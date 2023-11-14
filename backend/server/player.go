@@ -1,9 +1,8 @@
 package server
 
 import (
-	"encoding/json"
 	"guessasketch/database"
-	"log"
+	"guessasketch/utils"
 	"net/http"
 
 	"github.com/jmoiron/sqlx"
@@ -22,31 +21,29 @@ func (server *PlayerServer) Get(w http.ResponseWriter, r *http.Request) {
 	id := query.Get("id")
 
 	var player database.Player
-	database.GetPlayer(server.db, &player, id)
-
-	b, err := json.Marshal(player)
+	err := database.GetPlayer(server.db, &player, id)
 	if err != nil {
-		log.Printf("Failed to serialize player response")
+		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Failed to get player data"}
+		utils.WriteError(w, resp)
 		return
 	}
 
-	w.WriteHeader(200)
-	w.Write(b)
+	w.WriteHeader(http.StatusOK)
+	utils.WriteJson(w, player)
 }
 
 func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	sort := query.Get("sort")
 
-	players := []database.Player{}
-	database.GetLeaderboard(server.db, players, 50, sort)
-
-	b, err := json.Marshal(players)
+	var players []database.Player
+	err := database.GetLeaderboard(server.db, players, 50, sort)
 	if err != nil {
-		log.Printf("Failed to serialize leaderboard response")
+		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Failed to get the leaderboard"}
+		utils.WriteError(w, resp)
 		return
 	}
 
-	w.WriteHeader(200)
-	w.Write(b)
+	w.WriteHeader(http.StatusOK)
+	utils.WriteJson(w, players)
 }

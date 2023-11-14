@@ -6,20 +6,37 @@ import (
 	"net/http"
 )
 
-type ErrorMsg struct {
+type ErrorResp struct {
 	Code      int    `json:"code"`
 	Status    int    `json:"status"`
 	ErrorDesc string `json:"errorDesc"`
 }
 
-func SendErrResp(w http.ResponseWriter, msg ErrorMsg) {
-	b, err := json.Marshal(msg)
+func WriteError(w http.ResponseWriter, resp ErrorResp) {
+	b, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("Failed to serialize error for http response")
+		log.Println("Failed to serialize error for http response")
 		return
 	}
-	w.WriteHeader(msg.Status)
-	w.Write(b)
+	w.WriteHeader(resp.Status)
+	_, err = w.Write(b)
+	if err != nil {
+		log.Println("Failed to write body to response")
+		return
+	}
+}
+
+func WriteJson(w http.ResponseWriter, v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Println("Failed to marshal json response")
+		return
+	}
+	_, err = w.Write(b)
+	if err != nil {
+		log.Println("Failed to write body as response")
+		return
+	}
 }
 
 func EnableCors(w *http.ResponseWriter) {

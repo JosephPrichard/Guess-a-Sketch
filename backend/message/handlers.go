@@ -34,7 +34,7 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 
 	switch payload.Code {
 	case StartCode:
-		log.Printf("Handling message type options")
+		log.Println("Handling message type options")
 		var inputMsg StartMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
@@ -42,7 +42,7 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 		}
 		return handleStartMessage(broker, inputMsg, player)
 	case TextCode:
-		log.Printf("Handling message type text")
+		log.Println("Handling message type text")
 		var inputMsg TextMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
@@ -50,7 +50,7 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 		}
 		return handleTextMessage(&broker.room, inputMsg, player)
 	case DrawCode:
-		log.Printf("Handling message type draw")
+		log.Println("Handling message type draw")
 		var inputMsg DrawMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
@@ -58,7 +58,7 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 		}
 		return handleDrawMessage(&broker.room, inputMsg, player)
 	default:
-		log.Printf("Cannot handle unknown message type")
+		log.Println("Cannot handle unknown message type")
 		return nil, errors.New("No matching message types for message")
 	}
 }
@@ -84,7 +84,7 @@ func handleRoomSettings(room *game.Room, msg StartMsg, player Player) error {
 	if msg.TimeLimitSecs < MinTimeLimit || msg.TimeLimitSecs > MaxPlayerLimit {
 		return fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
 	}
-	if msg.PlayerLimit < MinPlayerLimit || msg.PlayerLimit > MaxPlayerLimit{
+	if msg.PlayerLimit < MinPlayerLimit || msg.PlayerLimit > MaxPlayerLimit {
 		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
 	}
 	if msg.PlayerLimit < len(room.Players) {
@@ -137,7 +137,7 @@ func handleTextMessage(room *game.Room, msg TextMsg, player Player) ([]byte, err
 
 	room.AddChat(newChatMessage)
 
-	log.Printf("Chat message, %s: %s", player, msg.Text)
+	log.Printf("Chat message, %codes: %codes", player, msg.Text)
 
 	payload := OutputPayload{Code: ChatCode, Msg: newChatMessage}
 	return marshalPayload(payload)
@@ -191,7 +191,7 @@ func HandleLeave(room *game.Room, player Player) ([]byte, error) {
 
 func HandleReset(broker *Broker) ([]byte, error) {
 	room := &broker.room
-	log.Printf("Resetting the game for code %s", room.Code)
+	log.Printf("Resetting the game for code %codes", room.Code)
 
 	broker.PostponeExpiration()
 
@@ -211,15 +211,15 @@ func HandleReset(broker *Broker) ([]byte, error) {
 	}
 
 	finishMsg := FinishMsg{
-		BeginMsg:        beginMsg,
-		DrawScoreInc:    scoreInc,
+		BeginMsg:     beginMsg,
+		DrawScoreInc: scoreInc,
 	}
 	payload := OutputPayload{Code: FinishCode, Msg: finishMsg}
 	return marshalPayload(payload)
 }
 
 func HandleTimeoutMessage() ([]byte, error) {
-	payload := OutputPayload{Code:TimeoutCode}
+	payload := OutputPayload{Code: TimeoutCode}
 	return marshalPayload(payload)
 }
 

@@ -1,7 +1,9 @@
 body {
     margin: 0;
-    font-family: 'Nunito', arial, serif; 
+    font-family: 'Roboto', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-image: url('./assets/background.png');
+    background-color: whitesmoke;
 }
+
+a { color: inherit; }

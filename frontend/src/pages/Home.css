@@ -1,0 +1,30 @@
+.Home {
+  width: 25%;
+  text-align: center;
+  margin: 50px auto auto;
+}
+
+.HomeSubTitle {
+  color: black;
+  font-weight: 600;
+  font-size: 30px;
+  margin-bottom: 0;
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+.HomeTitle {
+  color: rgb(48, 124, 245);
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-weight: 900;
+  font-size: 50px;
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+.HomeBody {
+  margin-bottom: 30px;
+}
+
+.Group {
+  display: flex;
+}
