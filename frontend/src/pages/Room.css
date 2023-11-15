@@ -19,14 +19,14 @@
     margin-left: auto;
     margin-right: auto;
     width: fit-content;
-    box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);
+    /*box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);*/
 }
 
 .Sidebar {
     background-color: whitesmoke;
     width: 20%;
     height: 100%;
-    box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);
+    /*box-shadow: 7px 6px 13px -2px rgba(206,206,206,0.75);*/
     display: flex;
     flex-direction: column;
 }

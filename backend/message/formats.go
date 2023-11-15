@@ -19,8 +19,6 @@ const (
 	TimeoutCode = 9
 )
 
-type StartMsg = game.RoomSettings
-
 type TextMsg struct {
 	Text string `json:"text"`
 }

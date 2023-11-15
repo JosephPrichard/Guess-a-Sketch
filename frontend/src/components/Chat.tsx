@@ -1,21 +1,21 @@
 import "./Chat.css"
 import { For, createSignal, Show } from "solid-js";
-import { createStore } from "solid-js/store";
 import { RoomProps } from "../pages/Room";
-import { CHAT_CODE } from "../pages/messages";
+import { CHAT_CODE, Player, TEXT_CODE } from "../room/messages";
 
 export interface ChatMsg {
     text: string;
-    player: string;
-    guessIncScore: number;
+    player: Player;
+    guessScoreInc: number;
 }
 
 const Chat = ({ room }: RoomProps) => {
     const [newChat, setNewChat] = createSignal("");
-    const [chats, setChats] = createStore<ChatMsg[]>([]);
+    const [chats, setChats] = createSignal<ChatMsg[]>([]);
 
     room.subscribe(CHAT_CODE, (payload) => {
-
+        const msg = payload.msg as ChatMsg;
+        setChats([...chats(), msg]);
     });
 
     return (
@@ -24,7 +24,7 @@ const Chat = ({ room }: RoomProps) => {
                 Chat
             </div>
             <div>
-                <For each={chats}>
+                <For each={chats()}>
                     {(chat) => (
                         <ChatMsg {...chat}/>
                     )}
@@ -34,7 +34,17 @@ const Chat = ({ room }: RoomProps) => {
                 placeholder="Type your guess here"
                 class="ChatInput"
                 value={newChat()}
-                onChange={e => setNewChat(e.target.value)}
+                onInput={e => setNewChat(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === "Enter") {
+                        room.send({
+                            code: TEXT_CODE,
+                            msg: {
+                                text: newChat()
+                            }
+                        });
+                    }
+                }}
             />
         </div>
     );
@@ -43,18 +53,18 @@ const Chat = ({ room }: RoomProps) => {
 const ChatMsg = (props: ChatMsg) => {
     return (
         <Show
-            when={props.guessIncScore <= 0}
+            when={props.guessScoreInc === 0}
             fallback={
                 <div class="ChatMsg">
                     <span>
-                        {props.player} guessed the word! (+{props.guessIncScore})
+                        {props.player.name} guessed the word! (+{props.guessScoreInc})
                     </span>
                 </div>
             }
         >
             <div class="ChatMsg">
                 <span>
-                    {props.player}:
+                    {props.player.name}:
                 </span>
                 <span>
                     {" "}

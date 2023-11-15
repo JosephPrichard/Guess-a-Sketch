@@ -9,14 +9,8 @@ import (
 )
 
 const (
-	MinWordBank    = 10
-	MinChatLen     = 5
-	MaxChatLen     = 50
-	MinTimeLimit   = 15
-	MaxTimeLimit   = 240
-	MinPlayerLimit = 2
-	MaxPlayerLimit = 12
-	MaxTotalRounds = 6
+	MinChatLen = 5
+	MaxChatLen = 50
 )
 
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
@@ -34,15 +28,11 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 
 	switch payload.Code {
 	case StartCode:
-		log.Println("Handling message type options")
-		var inputMsg StartMsg
-		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return nil, ErrUnMarshal
 		}
-		return handleStartMessage(broker, inputMsg, player)
+		return handleStartMessage(broker, player)
 	case TextCode:
-		log.Println("Handling message type text")
 		var inputMsg TextMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
@@ -50,7 +40,6 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 		}
 		return handleTextMessage(&broker.room, inputMsg, player)
 	case DrawCode:
-		log.Println("Handling message type draw")
 		var inputMsg DrawMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
@@ -63,38 +52,8 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 	}
 }
 
-func handleStartMessage(broker *Broker, msg StartMsg, player Player) ([]byte, error) {
-	err := handleRoomSettings(&broker.room, msg, player)
-	if err != nil {
-		return nil, err
-	}
+func handleStartMessage(broker *Broker, player Player) ([]byte, error) {
 	return handleStartGame(broker, player)
-}
-
-func handleRoomSettings(room *game.Room, msg StartMsg, player Player) error {
-	if room.PlayerIsNotHost(player) {
-		return errors.New("Player must be the host to change the game options")
-	}
-	if room.Stage != game.Lobby {
-		return errors.New("Cannot modify options for a game after it starts")
-	}
-	if len(msg.CustomWordBank) < MinPlayerLimit {
-		return fmt.Errorf("Word bank must have at least %d words", MinWordBank)
-	}
-	if msg.TimeLimitSecs < MinTimeLimit || msg.TimeLimitSecs > MaxPlayerLimit {
-		return fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
-	}
-	if msg.PlayerLimit < MinPlayerLimit || msg.PlayerLimit > MaxPlayerLimit {
-		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
-	}
-	if msg.PlayerLimit < len(room.Players) {
-		return errors.New("Cannot reduce player limit lower than number of players currently in the room")
-	}
-	if msg.TotalRounds > MaxTotalRounds {
-		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
-	}
-	room.Settings = msg
-	return nil
 }
 
 func handleStartGame(broker *Broker, player Player) ([]byte, error) {

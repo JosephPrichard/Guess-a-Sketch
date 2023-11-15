@@ -98,6 +98,12 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	game.SettingsWithDefaults(&settings)
 	settings.SharedWordBank = server.GameWordBank
+	err = game.IsSettingsValid(settings)
+	if err != nil {
+		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: err.Error()}
+		utils.WriteError(w, resp)
+		return
+	}
 
 	broker := message.NewBroker(code, settings)
 	log.Printf("Starting a broker for code %s", code)
@@ -180,6 +186,7 @@ func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber messa
 			return
 		}
 		// read any message from the socket and broadcast it to the broker
+		log.Println("Receiving message", string(p))
 		broker.SendMessage <- message.SentMsg{Message: p, Sender: subscriber}
 	}
 }
@@ -196,6 +203,7 @@ func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
 	}()
 	for resp := range subscriber {
 		// read values from channel and write back to socket
+		log.Println("Sending message", string(resp))
 		err := ws.WriteMessage(websocket.TextMessage, resp)
 		if err != nil {
 			log.Printf("Error writing message %s", err)

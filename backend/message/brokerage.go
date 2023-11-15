@@ -82,7 +82,6 @@ func (brokerage *Brokerage) purgeExpired(now time.Time) {
 func (brokerage *Brokerage) startCleanup(period time.Duration) {
 	// periodically cleanup expired keys from the map
 	for now := range time.NewTicker(period).C {
-		log.Println("Puring expired records in brokerage")
 		brokerage.purgeExpired(now)
 	}
 }

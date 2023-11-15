@@ -1,5 +1,18 @@
 package game
 
+import (
+	"fmt"
+)
+
+const (
+	MinWordBank    = 10
+	MinTimeLimit   = 15
+	MaxTimeLimit   = 240
+	MinPlayerLimit = 2
+	MaxPlayerLimit = 12
+	MaxTotalRounds = 6
+)
+
 type RoomSettings struct {
 	PlayerLimit    int      `json:"playerLimit"`    // max players that can join room state
 	TotalRounds    int      `json:"totalRounds"`    // total rounds for the game to go through
@@ -23,4 +36,20 @@ func SettingsWithDefaults(settings *RoomSettings) {
 	if settings.CustomWordBank == nil {
 		settings.CustomWordBank = make([]string, 0)
 	}
+}
+
+func IsSettingsValid(settings RoomSettings) error {
+	if len(settings.CustomWordBank) < MinWordBank {
+		return fmt.Errorf("Word bank must have at least %d words", MinWordBank)
+	}
+	if settings.TimeLimitSecs < MinTimeLimit || settings.TimeLimitSecs > MaxPlayerLimit {
+		return fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
+	}
+	if settings.PlayerLimit < MinPlayerLimit || settings.PlayerLimit > MaxPlayerLimit {
+		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+	}
+	if settings.TotalRounds > MaxTotalRounds {
+		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+	}
+	return nil
 }

@@ -1,7 +1,7 @@
 import "./Canvas.css";
 import { Index, createSignal, onMount } from "solid-js";
 import { RoomProps } from "../pages/Room";
-import { DRAW_CODE } from "../pages/messages";
+import { DRAW_CODE } from "../room/messages";
 
 const COLORS = [
     "black", "white", "grey", "red", "orange", "yellow", "lime", 
