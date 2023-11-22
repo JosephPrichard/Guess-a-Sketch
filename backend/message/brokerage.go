@@ -1,7 +1,6 @@
 package message
 
 import (
-	"guessasketch/utils"
 	"log"
 	"sync"
 	"time"
@@ -49,7 +48,12 @@ func (brokerage *Brokerage) Codes(offset int, limit int) []string {
 	defer brokerage.mu.Unlock()
 
 	codes := make([]string, 0)
-	upperLimit := utils.Min(offset+limit, len(brokerage.codes))
+
+	upperLimit := offset + limit
+	if len(brokerage.codes) < upperLimit {
+		upperLimit = len(brokerage.codes)
+	}
+
 	for i := offset; i < upperLimit; i++ {
 		c := brokerage.codes[i]
 		codes = append(codes, c)
@@ -74,7 +78,7 @@ func (brokerage *Brokerage) purgeExpired(now time.Time) {
 	for i, code := range brokerage.codes {
 		_, expired := expiredCodes[code]
 		if expired {
-			brokerage.codes = utils.Remove(brokerage.codes, i)
+			brokerage.codes = append(brokerage.codes[:i], brokerage.codes[i+1:]...)
 		}
 	}
 }

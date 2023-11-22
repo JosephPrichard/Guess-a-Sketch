@@ -8,7 +8,7 @@ import (
 
 var alphanumericRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-func GenerateCode(len int) (string, error) {
+func HexCode(len int) (string, error) {
 	b := make([]byte, len/2)
 	_, err := crand.Read(b)
 	if err != nil {

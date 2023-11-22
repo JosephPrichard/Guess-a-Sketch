@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/google/uuid"
 	"guessasketch/database"
 	"guessasketch/utils"
 	"net/http"
@@ -8,42 +9,62 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+type GameResult = database.StatsUpdate
+
 type PlayerServer struct {
-	db *sqlx.DB
+	db         *sqlx.DB
+	authServer *AuthServer
 }
 
-func NewPlayerServer(db *sqlx.DB) *PlayerServer {
-	return &PlayerServer{db}
+func NewPlayerServer(db *sqlx.DB, authServer *AuthServer) *PlayerServer {
+	return &PlayerServer{db: db, authServer: authServer}
 }
 
 func (server *PlayerServer) Get(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	id := query.Get("id")
 
-	var player database.Player
-	err := database.GetPlayer(server.db, &player, id)
+	var player *database.Player
+	err := database.GetPlayer(server.db, player, id)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Failed to get player data"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if player == nil {
+		utils.WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
+	w.Header().Set("Cache-Control", "max-age=1800")
 	w.WriteHeader(http.StatusOK)
 	utils.WriteJson(w, player)
+}
+
+func (server *PlayerServer) NewPlayer(name string) (*database.Player, error) {
+	player := database.Player{ID: uuid.New().String(), Username: name}
+	err := database.CreatePlayer(server.db, player)
+	if err != nil {
+		return nil, err
+	}
+	return &player, nil
 }
 
 func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	sort := query.Get("sort")
 
-	var players []database.Player
+	players := make([]database.Player, 0)
 	err := database.GetLeaderboard(server.db, players, 50, sort)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Failed to get the leaderboard"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
+	w.Header().Set("Cache-Control", "max-age=3600")
 	w.WriteHeader(http.StatusOK)
 	utils.WriteJson(w, players)
+}
+
+func (server *PlayerServer) ProcessGameResults(results []GameResult) {
+	database.UpdateStats(server.db, results)
 }

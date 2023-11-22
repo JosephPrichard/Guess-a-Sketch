@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"log"
 	"math/rand"
 	"time"
@@ -15,8 +16,8 @@ const (
 )
 
 type Player struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 type Chat struct {
@@ -26,21 +27,21 @@ type Chat struct {
 }
 
 type Room struct {
-	Code       string         `json:"code"`       // code of the room that uniquely identifies it
-	CurrRound  int            `json:"currRound"`  // the current round
-	Players    []Player       `json:"players"`    // stores all players in the order they joined in
-	ScoreBoard map[string]int `json:"scoreBoard"` // maps player IDs to scores
-	ChatLog    []Chat         `json:"chatLog"`    // stores the chat log
-	Stage      int            `json:"stage"`      // the current stage the room is
-	Settings   RoomSettings   `json:"settings"`   // settings for the room set before game starts
-	Turn       GameTurn       `json:"turn"`       // stores the current game turn
+	Code       string            `json:"code"`       // code of the room that uniquely identifies it
+	CurrRound  int               `json:"currRound"`  // the current round
+	Players    []Player          `json:"players"`    // stores all players in the order they joined in
+	ScoreBoard map[uuid.UUID]int `json:"scoreBoard"` // maps player IDs to scores
+	ChatLog    []Chat            `json:"chatLog"`    // stores the chat log
+	Stage      int               `json:"stage"`      // the current stage the room is
+	Settings   RoomSettings      `json:"settings"`   // settings for the room set before game starts
+	Turn       GameTurn          `json:"turn"`       // stores the current game turn
 }
 
 func NewRoom(code string, settings RoomSettings) Room {
 	return Room{
 		Code:       code,
 		Players:    make([]Player, 0),
-		ScoreBoard: make(map[string]int),
+		ScoreBoard: make(map[uuid.UUID]int),
 		ChatLog:    make([]Chat, 0),
 		Settings:   settings,
 		Turn:       NewGameTurn(),
@@ -122,11 +123,12 @@ func (room *Room) FinishGame() {
 
 func (room *Room) setNextWord() {
 	// pick a new word from the shared or custom word bank
-
-	index := rand.Intn(len(room.Settings.SharedWordBank) + len(room.Settings.CustomWordBank))
-	if index < len(room.Settings.SharedWordBank) {
+	bank := rand.Intn(2)
+	if bank == 0 {
+		index := rand.Intn(len(room.Settings.SharedWordBank))
 		room.Turn.CurrWord = room.Settings.SharedWordBank[index]
 	} else {
+		index := rand.Intn(len(room.Settings.CustomWordBank))
 		room.Turn.CurrWord = room.Settings.CustomWordBank[index]
 	}
 }
@@ -166,7 +168,7 @@ func (room *Room) OnGuess(player Player, text string) int {
 	scoreInc := (timeLimitSecs-int(timeSinceStartSecs))/timeLimitSecs*400 + 50
 	room.ScoreBoard[player.ID] += scoreInc
 
-	room.Turn.SetGuesser(player.ID)
+	room.Turn.SetGuesser(&player)
 	return scoreInc
 }
 

@@ -1,5 +1,6 @@
 .Home {
   width: 25%;
+  min-width: 350px;
   text-align: center;
   margin: 50px auto auto;
 }

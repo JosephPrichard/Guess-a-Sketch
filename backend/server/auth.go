@@ -1,6 +1,12 @@
 package server
 
 import (
+	"errors"
+	"fmt"
+	"guessasketch/game"
+	"guessasketch/utils"
+	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -8,77 +14,97 @@ import (
 	"github.com/google/uuid"
 )
 
-type Session struct {
-	ID    string
+type JwtSession struct {
+	user  User
 	Guest bool
 	jwt.RegisteredClaims
 }
 
-func NewSession(id string) Session {
-	return Session{
-		ID:               id,
+type User = game.Player
+
+type TokenResp struct {
+	Token string `json:"token"`
+}
+
+func NewSession(user User, isGuest bool) JwtSession {
+	expiry := time.Now().Add(24 * time.Hour)
+	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
+	return JwtSession{
+		user:             user,
 		Guest:            false,
-		RegisteredClaims: jwt.RegisteredClaims{},
+		RegisteredClaims: claims,
 	}
 }
 
-func GuestSession() Session {
-	session := NewSession(uuid.New().String())
-	session.Guest = true
-	return session
+func GuestUser() User {
+	return User{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
 }
 
 type AuthServer struct {
-	jwtKey string
+	jwtKey []byte
 }
 
 func NewAuthServer(jwtKey string) *AuthServer {
-	return &AuthServer{jwtKey}
+	return &AuthServer{jwtKey: []byte(jwtKey)}
 }
 
-func (server *AuthServer) keyFunc(token *jwt.Token) (interface{}, error) {
+func (server *AuthServer) keyFunc(_ *jwt.Token) (interface{}, error) {
 	return server.jwtKey, nil
 }
 
-func (server *AuthServer) SetSession(w http.ResponseWriter, session Session) error {
-	expiry := time.Now().Add(24 * time.Hour)
-
-	session.ExpiresAt = jwt.NewNumericDate(expiry)
-
+func (server *AuthServer) GenerateToken(session JwtSession) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, session)
 	tokenString, err := token.SignedString(server.jwtKey)
 	if err != nil {
-		return err
+		return "", errors.New(fmt.Sprintf("Failed to generate token for session %s with error %s", session.ID, err.Error()))
 	}
-
-	cookie := &http.Cookie{
-		Name:    "session",
-		Value:   tokenString,
-		Expires: expiry,
-	}
-	http.SetCookie(w, cookie)
-	return nil
+	return tokenString, nil
 }
 
-func (server *AuthServer) GetSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
-	cookie, err := r.Cookie("session")
-
-	var session Session
-	if cookie != nil && err == nil {
-		token, err := jwt.ParseWithClaims(cookie.Value, &session, server.keyFunc)
+// gets the session from a request, returning an error if it cannot be extracted or a nil session if there is no session
+func (server *AuthServer) GetSession(token string) (*JwtSession, error) {
+	var session JwtSession
+	if token != "" {
+		jwtToken, err := jwt.ParseWithClaims(token, &session, server.keyFunc)
 		if err != nil {
+			log.Printf("Failed to parse jwt with error %s", err.Error())
 			return nil, err
 		}
-		if !token.Valid {
-			session = GuestSession()
+		if !jwtToken.Valid {
+			return nil, nil
 		}
 	} else {
-		// issue a new guest session
-		session = GuestSession()
+		return nil, nil
 	}
 
-	server.SetSession(w, session)
 	return &session, nil
+}
+
+func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Request) {
+	utils.EnableCors(&w)
+
+	token := r.Header.Get("token")
+	session, err := server.GetSession(token)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if session == nil {
+		newSession := NewSession(GuestUser(), true)
+		session = &newSession
+		token, err = server.GenerateToken(newSession)
+		if err != nil {
+			utils.WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	log.Printf("JwtSession with id %s", session.ID)
+
+	tokenResp := TokenResp{Token: token}
+	w.WriteHeader(http.StatusOK)
+	utils.WriteJson(w, tokenResp)
+	return
 }
 
 func (server *AuthServer) Login(w http.ResponseWriter, r *http.Request) {

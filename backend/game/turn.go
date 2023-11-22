@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/google/uuid"
 	"strings"
 	"time"
 )
@@ -14,11 +15,11 @@ type Circle struct {
 }
 
 type GameTurn struct {
-	CurrWord        string          `json:"currWord"`        // current word to guess in session
-	CurrPlayerIndex int             `json:"currPlayerIndex"` // index of player drawing on canvas
-	Canvas          []Circle        `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
-	guessers        map[string]bool // map storing each player ID who has guessed correctly this game
-	startTimeSecs   int64           // start time in milliseconds (unix epoch)
+	CurrWord        string             `json:"currWord"`        // current word to guess in session
+	CurrPlayerIndex int                `json:"currPlayerIndex"` // index of player drawing on canvas
+	Canvas          []Circle           `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
+	guessers        map[uuid.UUID]bool // map storing each player ID who has guessed correctly this game
+	startTimeSecs   int64              // start time in milliseconds (unix epoch)
 }
 
 func NewGameTurn() GameTurn {
@@ -26,7 +27,7 @@ func NewGameTurn() GameTurn {
 		Canvas:          make([]Circle, 0),
 		CurrPlayerIndex: -1,
 		startTimeSecs:   time.Now().Unix(),
-		guessers:        make(map[string]bool),
+		guessers:        make(map[uuid.UUID]bool),
 	}
 }
 
@@ -57,8 +58,8 @@ func (turn *GameTurn) ContainsCurrWord(text string) bool {
 	return false
 }
 
-func (turn *GameTurn) SetGuesser(playerID string) {
-	turn.guessers[playerID] = true
+func (turn *GameTurn) SetGuesser(player *Player) {
+	turn.guessers[player.ID] = true
 }
 
 func (turn *GameTurn) Draw(stroke Circle) {

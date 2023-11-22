@@ -4,8 +4,8 @@ import Canvas from "../components/Canvas";
 import Chat from "../components/Chat";
 import { useParams } from "@solidjs/router";
 import TopBar from "../components/TopBar";
-import { RoomConn, useRoomConnection } from "../room/useRoomListener";
-import { START_CODE } from "../room/messages";
+import { RoomConn, useRoomConnection } from "../websocket/listener";
+import { START_CODE } from "../websocket/messages";
 import { Match, Show, Switch } from "solid-js";
 
 export interface RoomProps {

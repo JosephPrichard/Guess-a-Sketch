@@ -2,14 +2,16 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"guessasketch/server"
 	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
 //go:embed words.txt
@@ -23,19 +25,30 @@ func main() {
 	}
 	log.Println("Env vars", envVars)
 
+	jwtSecretKey := envVars["JWT_SECRET_KEY"]
+	dbUser := envVars["DB_USER"]
+	dbName := envVars["DB_NAME"]
+	dbHost := envVars["DB_HOST"]
+	dbPass := envVars["DB_PASSWORD"]
+	dbPort := envVars["DB_PORT"]
+
 	rand.Seed(time.Now().UnixNano())
 	log.Println("Started the server...")
 
 	gameWordBank := strings.Split(words, "\n")
 
-	authServer := server.NewAuthServer(envVars["JWT_SECRET_KEY"])
-	playerServer := server.NewPlayerServer(nil)
-	wsServerConfig := server.RoomsServerConfig{
-		GameWordBank: gameWordBank,
-		AuthServer:   authServer,
-		PlayerServer: playerServer,
+	dataSource := fmt.Sprintf(
+		"user=%s dbname=%s host=%s password=%s port=%s sslmode=disable",
+		dbUser, dbName, dbHost, dbPass, dbPort)
+	db, err := sqlx.Connect("postgres", dataSource)
+	if err != nil {
+		log.Fatalln(err)
+		return
 	}
-	roomsServer := server.NewRoomsServer(wsServerConfig)
+
+	authServer := server.NewAuthServer(jwtSecretKey)
+	playerServer := server.NewPlayerServer(db, authServer)
+	roomsServer := server.NewRoomsServer(gameWordBank, authServer, playerServer)
 
 	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)

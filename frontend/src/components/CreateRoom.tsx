@@ -1,6 +1,6 @@
 import "./CreateRoom.css";
-import { For, createSignal } from "solid-js";
-import { DOMAIN } from "../App";
+import { For, createSignal, useContext } from "solid-js";
+import { TempMsgContext, HTTP_URL } from "../App";
 import { useNavigate } from "@solidjs/router";
 
 const MAX_PLAYER_SETTINGS = Array.from({ length: 11 }, (_, index) => 2 + index);
@@ -21,16 +21,16 @@ interface RoomSettings {
 
 async function createRoom(settings: RoomSettings): Promise<[string, boolean]> {
     try {
-        const resp = await fetch(`http://${DOMAIN}/rooms/create`,
+        const resp = await fetch(`${HTTP_URL}/rooms/create`,
             { method: "POST", mode: "cors", body: JSON.stringify(settings) });
         const json = await resp.json();
         if (resp.ok) {
-            return [json["Code"] as string, false];
+            return [json["code"] as string, false];
         } else {
-            return [json["ErrorDesc"] as string, true];
+            return [json["errorDesc"] as string, true];
         }
     } catch(ex) {
-        return ["Failed to create the room", true];
+        return ["Failed to create the websocket", true];
     }
 }
 
@@ -42,6 +42,7 @@ const CreateRoom = ({ onClose }: Props) => {
     const [isPublic, setIsPublic] = createSignal<boolean>(true);
 
     const navigate = useNavigate();
+    const tempMsg = useContext(TempMsgContext);
 
     return (
         <div>
@@ -110,7 +111,7 @@ const CreateRoom = ({ onClose }: Props) => {
                             if (!error) {
                                 navigate(`/rooms/${value}`);
                             } else {
-                                console.log(value);
+                                tempMsg.addMsg(value);
                             }
                         }}
                     >

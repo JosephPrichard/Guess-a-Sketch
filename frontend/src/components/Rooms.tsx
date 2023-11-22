@@ -1,18 +1,18 @@
 import "./Rooms.css";
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show, useContext } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { DOMAIN } from "../App";
+import { HTTP_URL, TempMsgContext } from "../App";
 
-export type RoomType = string;
+export type RoomData = string;
 
-async function getRooms(): Promise<[RoomType[], string, boolean]> {
+async function getRooms(): Promise<[RoomData[], string, boolean]> {
     try {
-        const resp = await fetch(`http://${DOMAIN}/rooms`, { method: "GET", mode: "cors" });
+        const resp = await fetch(`${HTTP_URL}/rooms`, { method: "GET", mode: "cors" });
         const json = await resp.json();
         if (resp.ok) {
-            return [json as RoomType[], "", false];
+            return [json, "", false];
         } else {
-            return [[], json["ErrorDesc"] as string, true];
+            return [[], json["errorDesc"], true];
         }
     } catch(ex) {
         return [[], "Failed to get the rooms", true];
@@ -20,16 +20,17 @@ async function getRooms(): Promise<[RoomType[], string, boolean]> {
 }
 
 const Rooms = () => {
-    const [rooms, setRooms] = createSignal<RoomType[]>([]);
+    const [rooms, setRooms] = createSignal<RoomData[]>([]);
 
     const navigate = useNavigate();
+    const tempMsg = useContext(TempMsgContext);
 
     onMount(async () => {
         const [rooms, msg, error] = await getRooms();
         if (!error) {
             setRooms(rooms);
         } else {
-            console.log(msg);
+            tempMsg.addMsg(msg);
         }
     });
 

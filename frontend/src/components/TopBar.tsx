@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import "./TopBar.css"
 import { RoomProps } from "../pages/Room";
-import { FINISH_CODE } from "../room/messages";
+import { FINISH_CODE } from "../websocket/messages";
 
 type Props = RoomProps & { code: string };
 

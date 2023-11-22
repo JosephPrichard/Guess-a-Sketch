@@ -1,14 +1,10 @@
 package server
 
 import (
-	"encoding/json"
-	"fmt"
 	"guessasketch/game"
 	"guessasketch/message"
 	"guessasketch/utils"
-	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,34 +13,32 @@ import (
 )
 
 type RoomCodeResp struct {
-	Code     string
-	Settings game.RoomSettings
-}
-
-type RoomsServerConfig struct {
-	GameWordBank []string
-	AuthServer   *AuthServer
-	PlayerServer *PlayerServer
+	Code     string            `json:"code"`
+	Settings game.RoomSettings `json:"settings"`
 }
 
 type RoomsServer struct {
-	upgrader  websocket.Upgrader
-	brokerage *message.Brokerage
-	RoomsServerConfig
+	upgrade      websocket.Upgrader
+	brokerage    *message.Brokerage
+	gameWordBank []string
+	authServer   *AuthServer
+	playerServer *PlayerServer
 }
 
-func NewRoomsServer(config RoomsServerConfig) *RoomsServer {
-	upgrader := websocket.Upgrader{
+func NewRoomsServer(gameWordBank []string, authServer *AuthServer, playerServer *PlayerServer) *RoomsServer {
+	upgrade := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
-	upgrader.CheckOrigin = func(r *http.Request) bool {
+	upgrade.CheckOrigin = func(r *http.Request) bool {
 		return true
 	}
 	return &RoomsServer{
-		upgrader:          upgrader,
-		brokerage:         message.NewBrokerMap(time.Minute),
-		RoomsServerConfig: config,
+		upgrade:      upgrade,
+		brokerage:    message.NewBrokerMap(time.Minute),
+		gameWordBank: gameWordBank,
+		authServer:   authServer,
+		playerServer: playerServer,
 	}
 }
 
@@ -58,8 +52,7 @@ func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 	if offsetStr != "" {
 		parsedOffset, err := strconv.ParseInt(offsetStr, 10, 32)
 		if err != nil {
-			resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Offset  parameters must be a 32-bit integer"}
-			utils.WriteError(w, resp)
+			utils.WriteError(w, http.StatusBadRequest, "Offset parameters must be a 32-bit integer")
 			return
 		}
 		offset = int(parsedOffset)
@@ -74,34 +67,25 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
-	code, err := utils.GenerateCode(8)
+	code, err := utils.HexCode(8)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to generate a valid error code"}
-		utils.WriteError(w, resp)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to read data from request body"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to generate a valid error code")
 		return
 	}
 
 	var settings game.RoomSettings
-	err = json.Unmarshal(body, &settings)
+	err = utils.ReadJson(r, &settings)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Invalid format for settings"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	game.SettingsWithDefaults(&settings)
-	settings.SharedWordBank = server.GameWordBank
+	settings.SharedWordBank = server.gameWordBank
+
 	err = game.IsSettingsValid(settings)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: err.Error()}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -115,54 +99,41 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	utils.WriteJson(w, roomCode)
 }
 
-func guestName() string {
-	return fmt.Sprintf("Guest %d", 10+rand.Intn(89))
-}
-
 func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	utils.EnableCors(&w)
 
-	session, err := server.AuthServer.GetSession(w, r)
-	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: err.Error()}
-		utils.WriteError(w, resp)
-		return
-	}
-	id := session.ID
-
 	query := r.URL.Query()
 	code := query.Get("code")
-	name := query.Get("name")
+	token := query.Get("token")
 
-	if len(name) == 0 {
-		name = guestName()
-	}
-	if len(name) > 15 {
-		resp := utils.ErrorResp{Status: http.StatusBadRequest, ErrorDesc: "Player name must be 15 or less characters"}
-		utils.WriteError(w, resp)
-		return
+	var player User
+	if token != "" {
+		// if a session token is specified, attempt to get the id for the user
+		session, err := server.authServer.GetSession(token)
+		if err != nil && session != nil {
+			player = session.user
+		}
+	} else {
+		player = GuestUser()
 	}
 
 	broker := server.brokerage.Load(code)
 	if broker == nil {
-		resp := utils.ErrorResp{Status: http.StatusNotFound, ErrorDesc: "Cannot find room for provided code"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusNotFound, "Cannot find room for provided code")
 		return
 	}
 
-	ws, err := server.upgrader.Upgrade(w, r, nil)
+	ws, err := server.upgrade.Upgrade(w, r, nil)
 	if err != nil {
-		resp := utils.ErrorResp{Status: http.StatusInternalServerError, ErrorDesc: "Failed to upgrade to websocket"}
-		utils.WriteError(w, resp)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to upgrade to websocket")
 		return
 	}
-
-	log.Printf("Joined room %s with name %s", code, name)
 
 	// create a new subscription channel and join the broker with it
-	player := message.Player{ID: id, Name: name}
 	subscriber := make(message.Subscriber)
 	broker.Subscribe <- message.SubscriberMsg{Subscriber: subscriber, Player: player}
+
+	log.Printf("Joined room %s with name %s and id %s", code, player.Name, player.ID)
 
 	go subscriberListener(ws, subscriber)
 	go socketListener(ws, broker, subscriber)
@@ -171,7 +142,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 // reads messages from socket and sends them to broker
 func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber message.Subscriber) {
 	defer func() {
-		// unsubscribes from the broker then closes the websocket connection if the client closes connection
+		// unsubscribes from the broker when the websocket is closed
 		broker.Unsubscribe <- subscriber
 		_ = ws.Close()
 		log.Printf("Socket listener close function called")

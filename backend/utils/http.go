@@ -2,6 +2,8 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 )
@@ -12,7 +14,8 @@ type ErrorResp struct {
 	ErrorDesc string `json:"errorDesc"`
 }
 
-func WriteError(w http.ResponseWriter, resp ErrorResp) {
+func WriteError(w http.ResponseWriter, status int, errorDesc string) {
+	resp := ErrorResp{Status: status, ErrorDesc: errorDesc}
 	b, err := json.Marshal(resp)
 	if err != nil {
 		log.Println("Failed to serialize error for http response")
@@ -24,6 +27,19 @@ func WriteError(w http.ResponseWriter, resp ErrorResp) {
 		log.Println("Failed to write body to response")
 		return
 	}
+}
+
+func ReadJson[T any](r *http.Request, result *T) error {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return errors.New("Failed to read data from request body")
+	}
+
+	err = json.Unmarshal(body, result)
+	if err != nil {
+		return errors.New("Invalid format for request body")
+	}
+	return nil
 }
 
 func WriteJson(w http.ResponseWriter, v any) {
@@ -40,5 +56,7 @@ func WriteJson(w http.ResponseWriter, v any) {
 }
 
 func EnableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+	header := (*w).Header()
+	header.Set("Access-Control-Allow-Origin", "*")
+	header.Set("Access-Control-Allow-Headers", "*")
 }

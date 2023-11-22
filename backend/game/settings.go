@@ -5,7 +5,6 @@ import (
 )
 
 const (
-	MinWordBank    = 10
 	MinTimeLimit   = 15
 	MaxTimeLimit   = 240
 	MinPlayerLimit = 2
@@ -39,17 +38,14 @@ func SettingsWithDefaults(settings *RoomSettings) {
 }
 
 func IsSettingsValid(settings RoomSettings) error {
-	if len(settings.CustomWordBank) < MinWordBank {
-		return fmt.Errorf("Word bank must have at least %d words", MinWordBank)
-	}
-	if settings.TimeLimitSecs < MinTimeLimit || settings.TimeLimitSecs > MaxPlayerLimit {
-		return fmt.Errorf("Time limit must be between %d and %d seconds", MaxTimeLimit, MaxTimeLimit)
+	if settings.TimeLimitSecs < MinTimeLimit || settings.TimeLimitSecs > MaxTimeLimit {
+		return fmt.Errorf("Time limit must be between %d and %d seconds", MinTimeLimit, MaxTimeLimit)
 	}
 	if settings.PlayerLimit < MinPlayerLimit || settings.PlayerLimit > MaxPlayerLimit {
-		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+		return fmt.Errorf("Games can only contain between %d and %d players", MinPlayerLimit, MaxPlayerLimit)
 	}
-	if settings.TotalRounds > MaxTotalRounds {
-		return fmt.Errorf("Games can only contain between %d and %d players", MaxPlayerLimit, MaxPlayerLimit)
+	if settings.TotalRounds > MaxTotalRounds || settings.TotalRounds < 0 {
+		return fmt.Errorf("Games can only have between 0 and %d rounds", MaxTotalRounds)
 	}
 	return nil
 }

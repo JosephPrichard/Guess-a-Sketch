@@ -1,7 +1,7 @@
 import "./Chat.css"
 import { For, createSignal, Show } from "solid-js";
 import { RoomProps } from "../pages/Room";
-import { CHAT_CODE, Player, TEXT_CODE } from "../room/messages";
+import { CHAT_CODE, Player, TEXT_CODE } from "../websocket/messages";
 
 export interface ChatMsg {
     text: string;

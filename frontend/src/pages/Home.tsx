@@ -3,6 +3,7 @@ import "./Home.css"
 import { useNavigate } from "@solidjs/router";
 import CreateRoom from "../components/CreateRoom";
 import Rooms from "../components/Rooms";
+import Login from "../components/Login";
 
 function setLocalPlayer(player: string) {
     localStorage.setItem("player", player);
@@ -36,7 +37,8 @@ const Home = () => {
                     Play with your friends or with anyone around the world. Login to save your stats and compete with your friends.
                 </div>
                 <div class="Space"/>
-                {/*<Avatar color={0} eyes={0} mouth={0} hat={0} modify />*/}
+                <Login/>
+                <div class="Space"/>
                 <div class="Group">
                     <input
                         placeholder="Enter your name"

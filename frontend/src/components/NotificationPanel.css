@@ -1,0 +1,17 @@
+.Notification {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    color: white;
+    padding: 10px 40px 40px 15px;
+    border-left: 5px #3a86ff solid;
+    background-color: #393939;
+    font-size: 14px;
+    max-width: 300px;
+    z-index: 10;
+}
+
+.NotificationTitle {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
