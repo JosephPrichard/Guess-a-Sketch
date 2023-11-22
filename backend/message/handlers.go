@@ -96,7 +96,7 @@ func handleTextMessage(room *game.Room, msg TextMsg, player Player) ([]byte, err
 
 	room.AddChat(newChatMessage)
 
-	log.Printf("Chat message, %codes: %codes", player, msg.Text)
+	log.Printf("Chat message, %s: %s", player, msg.Text)
 
 	payload := OutputPayload{Code: ChatCode, Msg: newChatMessage}
 	return marshalPayload(payload)
@@ -150,7 +150,7 @@ func HandleLeave(room *game.Room, player Player) ([]byte, error) {
 
 func HandleReset(broker *Broker) ([]byte, error) {
 	room := &broker.room
-	log.Printf("Resetting the game for code %codes", room.Code)
+	log.Printf("Resetting the game for code %s", room.Code)
 
 	broker.PostponeExpiration()
 

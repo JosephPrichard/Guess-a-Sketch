@@ -3,7 +3,6 @@ package message
 import (
 	"encoding/json"
 	"guessasketch/game"
-	"guessasketch/utils"
 	"log"
 	"sync/atomic"
 	"time"
@@ -77,7 +76,7 @@ func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {
 	resp, err := HandleJoin(&broker.room, subMsg.Player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(subMsg.Subscriber, err.Error())
+		SendErrorMsg(subMsg.Subscriber, err.Error())
 		close(subMsg.Subscriber)
 		return
 	}
@@ -94,7 +93,7 @@ func (broker *Broker) onUnsubscribe(subscriber Subscriber) {
 	resp, err := HandleLeave(&broker.room, player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(subscriber, err.Error())
+		SendErrorMsg(subscriber, err.Error())
 		return
 	}
 	log.Println("User unsubscribed from the broker")
@@ -111,7 +110,7 @@ func (broker *Broker) onMessage(sentMsg SentMsg) {
 	resp, err := HandleMessage(broker, sentMsg.Message, player)
 	if err != nil {
 		// only the sender should receieve the error response
-		SendErrMsg(sentMsg.Sender, err.Error())
+		SendErrorMsg(sentMsg.Sender, err.Error())
 		return
 	}
 	// broadcast a non error response to all subscribers
@@ -123,7 +122,7 @@ func (broker *Broker) onResetState() {
 	resp, err := HandleReset(broker)
 	if err != nil {
 		// if an error does exist, serialize it and replace the success message with it
-		errMsg := utils.ErrorResp{ErrorDesc: err.Error()}
+		errMsg := ErrorMsg{ErrorDesc: err.Error()}
 		b, err := json.Marshal(errMsg)
 		if err != nil {
 			log.Println("Failed to serialize error for ws message")

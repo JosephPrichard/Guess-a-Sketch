@@ -3,7 +3,6 @@ package server
 import (
 	"github.com/google/uuid"
 	"guessasketch/database"
-	"guessasketch/utils"
 	"net/http"
 
 	"github.com/jmoiron/sqlx"
@@ -27,17 +26,17 @@ func (server *PlayerServer) Get(w http.ResponseWriter, r *http.Request) {
 	var player *database.Player
 	err := database.GetPlayer(server.db, player, id)
 	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, err.Error())
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if player == nil {
-		utils.WriteError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	w.Header().Set("Cache-Control", "max-age=1800")
 	w.WriteHeader(http.StatusOK)
-	utils.WriteJson(w, player)
+	WriteJson(w, player)
 }
 
 func (server *PlayerServer) NewPlayer(name string) (*database.Player, error) {
@@ -56,13 +55,13 @@ func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) 
 	players := make([]database.Player, 0)
 	err := database.GetLeaderboard(server.db, players, 50, sort)
 	if err != nil {
-		utils.WriteError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	w.Header().Set("Cache-Control", "max-age=3600")
 	w.WriteHeader(http.StatusOK)
-	utils.WriteJson(w, players)
+	WriteJson(w, players)
 }
 
 func (server *PlayerServer) ProcessGameResults(results []GameResult) {

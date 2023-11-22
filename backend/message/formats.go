@@ -3,7 +3,6 @@ package message
 import (
 	"encoding/json"
 	"guessasketch/game"
-	"guessasketch/utils"
 	"log"
 )
 
@@ -52,8 +51,12 @@ type OutputPayload struct {
 	Msg  interface{} `json:"msg"`
 }
 
-func SendErrMsg(ch chan []byte, errorDesc string) {
-	msg := utils.ErrorResp{ErrorDesc: errorDesc}
+type ErrorMsg struct {
+	ErrorDesc string `json:"errorDesc"`
+}
+
+func SendErrorMsg(ch chan []byte, errorDesc string) {
+	msg := ErrorMsg{ErrorDesc: errorDesc}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		log.Println("Failed to serialize error for ws message")

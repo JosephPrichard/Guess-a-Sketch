@@ -1,9 +1,10 @@
 package server
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"guessasketch/game"
 	"guessasketch/message"
-	"guessasketch/utils"
 	"log"
 	"net/http"
 	"strconv"
@@ -43,7 +44,7 @@ func NewRoomsServer(gameWordBank []string, authServer *AuthServer, playerServer 
 }
 
 func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
-	utils.EnableCors(&w)
+	EnableCors(&w)
 
 	query := r.URL.Query()
 	offsetStr := query.Get("offsetStr")
@@ -52,7 +53,7 @@ func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 	if offsetStr != "" {
 		parsedOffset, err := strconv.ParseInt(offsetStr, 10, 32)
 		if err != nil {
-			utils.WriteError(w, http.StatusBadRequest, "Offset parameters must be a 32-bit integer")
+			WriteError(w, http.StatusBadRequest, "Offset parameters must be a 32-bit integer")
 			return
 		}
 		offset = int(parsedOffset)
@@ -60,23 +61,32 @@ func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 
 	rooms := server.brokerage.Codes(offset, 20)
 	w.WriteHeader(http.StatusOK)
-	utils.WriteJson(w, rooms)
+	WriteJson(w, rooms)
+}
+
+func HexCode(len int) (string, error) {
+	b := make([]byte, len/2)
+	_, err := crand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
-	utils.EnableCors(&w)
+	EnableCors(&w)
 
 	// generate a code, create a broker, start it, then store it in the map
-	code, err := utils.HexCode(8)
+	code, err := HexCode(8)
 	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "Failed to generate a valid error code")
+		WriteError(w, http.StatusInternalServerError, "Failed to generate a valid error code")
 		return
 	}
 
 	var settings game.RoomSettings
-	err = utils.ReadJson(r, &settings)
+	err = ReadJson(r, &settings)
 	if err != nil {
-		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -85,7 +95,7 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	err = game.IsSettingsValid(settings)
 	if err != nil {
-		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -96,11 +106,11 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
-	utils.WriteJson(w, roomCode)
+	WriteJson(w, roomCode)
 }
 
 func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
-	utils.EnableCors(&w)
+	EnableCors(&w)
 
 	query := r.URL.Query()
 	code := query.Get("code")
@@ -119,13 +129,13 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 
 	broker := server.brokerage.Load(code)
 	if broker == nil {
-		utils.WriteError(w, http.StatusNotFound, "Cannot find room for provided code")
+		WriteError(w, http.StatusNotFound, "Cannot find room for provided code")
 		return
 	}
 
 	ws, err := server.upgrade.Upgrade(w, r, nil)
 	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "Failed to upgrade to websocket")
+		WriteError(w, http.StatusInternalServerError, "Failed to upgrade to websocket")
 		return
 	}
 

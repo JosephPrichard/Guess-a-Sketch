@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"guessasketch/game"
-	"guessasketch/utils"
 	"log"
 	"math/rand"
 	"net/http"
@@ -81,12 +80,12 @@ func (server *AuthServer) GetSession(token string) (*JwtSession, error) {
 }
 
 func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Request) {
-	utils.EnableCors(&w)
+	EnableCors(&w)
 
 	token := r.Header.Get("token")
 	session, err := server.GetSession(token)
 	if err != nil {
-		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -95,7 +94,7 @@ func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Reques
 		session = &newSession
 		token, err = server.GenerateToken(newSession)
 		if err != nil {
-			utils.WriteError(w, http.StatusInternalServerError, err.Error())
+			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
@@ -103,7 +102,7 @@ func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Reques
 
 	tokenResp := TokenResp{Token: token}
 	w.WriteHeader(http.StatusOK)
-	utils.WriteJson(w, tokenResp)
+	WriteJson(w, tokenResp)
 	return
 }
 
