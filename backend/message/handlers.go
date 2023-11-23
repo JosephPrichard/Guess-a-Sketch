@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package message
 
 import (
@@ -23,7 +27,6 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-
 	log.Printf("Handling message code %d", payload.Code)
 
 	switch payload.Code {
@@ -79,7 +82,7 @@ func handleStartGame(broker *Broker, player Player) ([]byte, error) {
 	return marshalPayload(payload)
 }
 
-func handleTextMessage(room *game.Room, msg TextMsg, player Player) ([]byte, error) {
+func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte, error) {
 	text := msg.Text
 	if len(text) > MaxChatLen || len(text) < MinChatLen {
 		return nil, fmt.Errorf("Chat message must be less than %d characters in length and more than %d", MaxChatLen, MinChatLen)
@@ -103,7 +106,7 @@ func handleTextMessage(room *game.Room, msg TextMsg, player Player) ([]byte, err
 }
 
 // color, radius, x, and y are unvalidated fields for performance
-func handleDrawMessage(room *game.Room, msg DrawMsg, player Player) ([]byte, error) {
+func handleDrawMessage(room *game.GameRoom, msg DrawMsg, player Player) ([]byte, error) {
 	if room.Stage != game.Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
@@ -117,7 +120,7 @@ func handleDrawMessage(room *game.Room, msg DrawMsg, player Player) ([]byte, err
 	return marshalPayload(payload)
 }
 
-func HandleJoin(room *game.Room, player game.Player) ([]byte, error) {
+func HandleJoin(room *game.GameRoom, player game.Player) ([]byte, error) {
 	err := room.Join(player)
 	if err != nil {
 		return nil, err
@@ -133,7 +136,7 @@ func HandleJoin(room *game.Room, player game.Player) ([]byte, error) {
 	return marshalPayload(payload)
 }
 
-func HandleLeave(room *game.Room, player Player) ([]byte, error) {
+func HandleLeave(room *game.GameRoom, player Player) ([]byte, error) {
 	leaveIndex := room.Leave(player)
 	if leaveIndex < 0 {
 		return nil, errors.New("Failed to leave the room, player couldn't be found")

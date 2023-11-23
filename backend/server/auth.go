@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package server
 
 import (
@@ -12,6 +16,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
+
+type AuthServer struct {
+	jwtKey []byte
+}
+
+func NewAuthServer(jwtKey string) *AuthServer {
+	return &AuthServer{jwtKey: []byte(jwtKey)}
+}
+
+func (server *AuthServer) keyFunc(_ *jwt.Token) (interface{}, error) {
+	return server.jwtKey, nil
+}
 
 type JwtSession struct {
 	user  User
@@ -37,18 +53,6 @@ func NewSession(user User, isGuest bool) JwtSession {
 
 func GuestUser() User {
 	return User{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
-}
-
-type AuthServer struct {
-	jwtKey []byte
-}
-
-func NewAuthServer(jwtKey string) *AuthServer {
-	return &AuthServer{jwtKey: []byte(jwtKey)}
-}
-
-func (server *AuthServer) keyFunc(_ *jwt.Token) (interface{}, error) {
-	return server.jwtKey, nil
 }
 
 func (server *AuthServer) GenerateToken(session JwtSession) (string, error) {

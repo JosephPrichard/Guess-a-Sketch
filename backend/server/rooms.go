@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package server
 
 import (
@@ -12,11 +16,6 @@ import (
 
 	"github.com/gorilla/websocket"
 )
-
-type RoomCodeResp struct {
-	Code     string            `json:"code"`
-	Settings game.RoomSettings `json:"settings"`
-}
 
 type RoomsServer struct {
 	upgrade      websocket.Upgrader
@@ -71,6 +70,11 @@ func HexCode(len int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+type RoomCodeResp struct {
+	Code     string            `json:"code"`
+	Settings game.RoomSettings `json:"settings"`
 }
 
 func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {

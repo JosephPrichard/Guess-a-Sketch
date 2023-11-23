@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package server
 
 import (
@@ -7,8 +11,6 @@ import (
 
 	"github.com/jmoiron/sqlx"
 )
-
-type GameResult = database.StatsUpdate
 
 type PlayerServer struct {
 	db         *sqlx.DB
@@ -63,6 +65,8 @@ func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, players)
 }
+
+type GameResult = database.StatsUpdate
 
 func (server *PlayerServer) ProcessGameResults(results []GameResult) {
 	database.UpdateStats(server.db, results)

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package game
 
 import (
@@ -26,7 +30,7 @@ type Chat struct {
 	GuessScoreInc int    `json:"guessScoreInc"` // if this is larger than 0, player guessed correctly
 }
 
-type Room struct {
+type GameRoom struct {
 	Code       string            `json:"code"`       // code of the room that uniquely identifies it
 	CurrRound  int               `json:"currRound"`  // the current round
 	Players    []Player          `json:"players"`    // stores all players in the order they joined in
@@ -37,8 +41,8 @@ type Room struct {
 	Turn       GameTurn          `json:"turn"`       // stores the current game turn
 }
 
-func NewRoom(code string, settings RoomSettings) Room {
-	return Room{
+func NewGameRoom(code string, settings RoomSettings) GameRoom {
+	return GameRoom{
 		Code:       code,
 		Players:    make([]Player, 0),
 		ScoreBoard: make(map[uuid.UUID]int),
@@ -48,18 +52,18 @@ func NewRoom(code string, settings RoomSettings) Room {
 	}
 }
 
-func (room *Room) GetCurrPlayer() *Player {
+func (room *GameRoom) GetCurrPlayer() *Player {
 	if room.Turn.CurrPlayerIndex < 0 {
 		return &Player{}
 	}
 	return &room.Players[room.Turn.CurrPlayerIndex]
 }
 
-func (room *Room) PlayerIsNotHost(player Player) bool {
+func (room *GameRoom) PlayerIsNotHost(player Player) bool {
 	return len(room.Players) < 1 || room.Players[0] != player
 }
 
-func (room *Room) ToMessage() []byte {
+func (room *GameRoom) ToMessage() []byte {
 	b, err := json.Marshal(room)
 	if err != nil {
 		log.Println(err.Error())
@@ -68,7 +72,7 @@ func (room *Room) ToMessage() []byte {
 	return b
 }
 
-func (room *Room) PlayerIndex(playerToFind Player) int {
+func (room *GameRoom) PlayerIndex(playerToFind Player) int {
 	// find player in the slice
 	index := -1
 	for i, player := range room.Players {
@@ -80,7 +84,7 @@ func (room *Room) PlayerIndex(playerToFind Player) int {
 	return index
 }
 
-func (room *Room) Join(player Player) error {
+func (room *GameRoom) Join(player Player) error {
 	_, exists := room.ScoreBoard[player.ID]
 	if exists {
 		return errors.New("Player cannot join, username is already in use")
@@ -93,7 +97,7 @@ func (room *Room) Join(player Player) error {
 	return nil
 }
 
-func (room *Room) Leave(playerToLeave Player) int {
+func (room *GameRoom) Leave(playerToLeave Player) int {
 	index := room.PlayerIndex(playerToLeave)
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
@@ -105,7 +109,7 @@ func (room *Room) Leave(playerToLeave Player) int {
 }
 
 // starts the game and returns a snapshot of the settings used to start the game
-func (room *Room) StartGame() {
+func (room *GameRoom) StartGame() {
 	room.Stage = Playing
 
 	room.Turn.ClearGuessers()
@@ -117,11 +121,11 @@ func (room *Room) StartGame() {
 	room.Turn.ResetStartTime()
 }
 
-func (room *Room) FinishGame() {
+func (room *GameRoom) FinishGame() {
 	room.Stage = Post
 }
 
-func (room *Room) setNextWord() {
+func (room *GameRoom) setNextWord() {
 	// pick a new word from the shared or custom word bank
 	bank := rand.Intn(2)
 	if bank == 0 {
@@ -133,7 +137,7 @@ func (room *Room) setNextWord() {
 	}
 }
 
-func (room *Room) cycleCurrPlayer() {
+func (room *GameRoom) cycleCurrPlayer() {
 	// go to the next player, circle back around when we reach the end
 	room.Turn.CurrPlayerIndex += 1
 	if room.Turn.CurrPlayerIndex >= len(room.Players) {
@@ -143,7 +147,7 @@ func (room *Room) cycleCurrPlayer() {
 }
 
 // handlers a player's guess and returns the increase in the score of player due to the guess
-func (room *Room) OnGuess(player Player, text string) int {
+func (room *GameRoom) OnGuess(player Player, text string) int {
 	// nothing happens if a player guesses when game is not in session
 	if room.Stage != Playing {
 		return 0
@@ -172,12 +176,12 @@ func (room *Room) OnGuess(player Player, text string) int {
 	return scoreInc
 }
 
-func (room *Room) OnResetScoreInc() int {
+func (room *GameRoom) OnResetScoreInc() int {
 	scoreInc := room.Turn.CalcResetScore()
 	room.ScoreBoard[room.GetCurrPlayer().ID] += scoreInc
 	return scoreInc
 }
 
-func (room *Room) AddChat(chat Chat) {
+func (room *GameRoom) AddChat(chat Chat) {
 	room.ChatLog = append(room.ChatLog, chat)
 }

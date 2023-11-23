@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package database
 
 type Player struct {
@@ -8,4 +12,10 @@ type Player struct {
 	WordsGuessed    uint32 `db:"words_guessed"`
 	DrawingsGuessed uint32 `db:"drawings_guessed"`
 	//Avatar          string `db:"id"`
+}
+
+type Drawing struct {
+	ID        int8   `db:"id"`
+	CreatedBy string `db:"created_by"`
+	Signature string `db:"signature"`
 }

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 package message
 
 import (
@@ -28,7 +32,7 @@ type Broker struct {
 	SendMessage chan SentMsg
 	ResetState  chan struct{}
 	Stop        chan struct{}
-	room        game.Room
+	room        game.GameRoom
 	subscribers map[Subscriber]Player
 	expireTime  atomic.Int64
 	IsPublic    bool
@@ -43,7 +47,7 @@ func NewBroker(code string, settings game.RoomSettings) *Broker {
 		ResetState:  make(chan struct{}),
 		Stop:        make(chan struct{}),
 		subscribers: make(map[Subscriber]Player),
-		room:        game.NewRoom(code, settings),
+		room:        game.NewGameRoom(code, settings),
 		IsPublic:    settings.IsPublic,
 	}
 	broker.PostponeExpiration()
@@ -109,7 +113,7 @@ func (broker *Broker) onMessage(sentMsg SentMsg) {
 	player := broker.subscribers[sentMsg.Sender]
 	resp, err := HandleMessage(broker, sentMsg.Message, player)
 	if err != nil {
-		// only the sender should receieve the error response
+		// only the sender should receive the error response
 		SendErrorMsg(sentMsg.Sender, err.Error())
 		return
 	}
