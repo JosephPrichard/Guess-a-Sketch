@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./NotificationPanel.css";
 import { Accessor, createEffect, createSignal, onCleanup } from "solid-js";
 

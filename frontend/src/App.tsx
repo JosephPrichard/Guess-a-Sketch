@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import './App.css';
 import { Router, Route, Routes } from '@solidjs/router';
 import Home from './pages/Home';

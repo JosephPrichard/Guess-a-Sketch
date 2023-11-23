@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import { createSignal, Show } from "solid-js";
 import "./Home.css"
 import { useNavigate } from "@solidjs/router";

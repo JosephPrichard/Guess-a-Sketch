@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import { For, createSignal } from "solid-js";
 import "./ScoreBoard.css";
 import { createMutable } from "solid-js/store";

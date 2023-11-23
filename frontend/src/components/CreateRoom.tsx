@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./CreateRoom.css";
 import { For, createSignal, useContext } from "solid-js";
 import { TempMsgContext, HTTP_URL } from "../App";

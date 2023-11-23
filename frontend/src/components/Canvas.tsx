@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./Canvas.css";
 import { Index, createSignal, onMount } from "solid-js";
 import { RoomProps } from "../pages/Room";

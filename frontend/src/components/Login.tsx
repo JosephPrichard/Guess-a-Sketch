@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./Login.css";
 import { gapi } from 'gapi-script';
 import { onMount } from "solid-js";

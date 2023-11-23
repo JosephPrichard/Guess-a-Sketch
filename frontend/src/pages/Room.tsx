@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./Room.css"
 import ScoreBoard from "../components/ScoreBoard";
 import Canvas from "../components/Canvas";

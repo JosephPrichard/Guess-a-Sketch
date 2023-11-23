@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import { Accessor, createSignal, onCleanup, onMount } from "solid-js";
 import { WS_URL } from "../App";
 import { Payload, JOIN_CODE, PlayerMsg, Player } from "./messages";

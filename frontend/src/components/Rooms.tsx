@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./Rooms.css";
 import { createSignal, For, onMount, Show, useContext } from "solid-js";
 import { useNavigate } from "@solidjs/router";

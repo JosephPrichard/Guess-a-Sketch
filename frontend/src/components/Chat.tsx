@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import "./Chat.css"
 import { For, createSignal, Show } from "solid-js";
 import { RoomProps } from "../pages/Room";

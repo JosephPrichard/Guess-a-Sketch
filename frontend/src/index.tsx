@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 /* @refresh reload */
 import { render } from 'solid-js/web';
 

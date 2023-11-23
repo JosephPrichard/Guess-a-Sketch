@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) Joseph Prichard 2023
+ */
+
 import { createSignal } from "solid-js";
 import "./TopBar.css"
 import { RoomProps } from "../pages/Room";
