@@ -10,20 +10,20 @@ import (
 	"time"
 )
 
-type Circle struct {
-	Color     uint8  `json:"color"`
-	Radius    uint8  `json:"radius"`
-	X         uint16 `json:"x"`
-	Y         uint16 `json:"y"`
-	Connected bool   `json:"connected"`
-}
-
 type GameTurn struct {
 	CurrWord        string             `json:"currWord"`        // current word to guess in session
 	CurrPlayerIndex int                `json:"currPlayerIndex"` // index of player drawing on canvas
 	Canvas          []Circle           `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
 	guessers        map[uuid.UUID]bool // map storing each player ID who has guessed correctly this game
 	startTimeSecs   int64              // start time in milliseconds (unix epoch)
+}
+
+type Circle struct {
+	Color     uint8  `json:"color"`
+	Radius    uint8  `json:"radius"`
+	X         uint16 `json:"x"`
+	Y         uint16 `json:"y"`
+	Connected bool   `json:"connected"`
 }
 
 func NewGameTurn() GameTurn {

@@ -12,6 +12,18 @@ import (
 	"time"
 )
 
+type Broker struct {
+	Subscribe   chan SubscriberMsg
+	Unsubscribe chan Subscriber
+	SendMessage chan SentMsg
+	ResetState  chan struct{}
+	Stop        chan struct{}
+	room        game.GameRoom
+	subscribers map[Subscriber]Player
+	expireTime  atomic.Int64
+	IsPublic    bool
+}
+
 type Subscriber = chan []byte
 
 type Player = game.Player
@@ -24,18 +36,6 @@ type SentMsg struct {
 type SubscriberMsg struct {
 	Subscriber Subscriber
 	Player     Player
-}
-
-type Broker struct {
-	Subscribe   chan SubscriberMsg
-	Unsubscribe chan Subscriber
-	SendMessage chan SentMsg
-	ResetState  chan struct{}
-	Stop        chan struct{}
-	room        game.GameRoom
-	subscribers map[Subscriber]Player
-	expireTime  atomic.Int64
-	IsPublic    bool
 }
 
 func NewBroker(code string, settings game.RoomSettings) *Broker {
@@ -74,6 +74,20 @@ func (broker *Broker) broadcast(resp []byte) {
 	for s := range broker.subscribers {
 		s <- resp
 	}
+}
+
+type ErrorMsg struct {
+	ErrorDesc string `json:"errorDesc"`
+}
+
+func SendErrorMsg(ch chan []byte, errorDesc string) {
+	msg := ErrorMsg{ErrorDesc: errorDesc}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("Failed to serialize error for ws message")
+		return
+	}
+	ch <- b
 }
 
 func (broker *Broker) onSubscribe(subMsg SubscriberMsg) {

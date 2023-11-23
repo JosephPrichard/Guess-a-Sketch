@@ -19,17 +19,6 @@ const (
 	Post    = 2
 )
 
-type Player struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
-}
-
-type Chat struct {
-	Player        Player `json:"player"`
-	Text          string `json:"text"`
-	GuessScoreInc int    `json:"guessScoreInc"` // if this is larger than 0, player guessed correctly
-}
-
 type GameRoom struct {
 	Code       string            `json:"code"`       // code of the room that uniquely identifies it
 	CurrRound  int               `json:"currRound"`  // the current round
@@ -39,6 +28,17 @@ type GameRoom struct {
 	Stage      int               `json:"stage"`      // the current stage the room is
 	Settings   RoomSettings      `json:"settings"`   // settings for the room set before game starts
 	Turn       GameTurn          `json:"turn"`       // stores the current game turn
+}
+
+type Player struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+type Chat struct {
+	Player        Player `json:"player"`
+	Text          string `json:"text"`
+	GuessScoreInc int    `json:"guessScoreInc"` // if this is larger than 0, player guessed correctly
 }
 
 func NewGameRoom(code string, settings RoomSettings) GameRoom {

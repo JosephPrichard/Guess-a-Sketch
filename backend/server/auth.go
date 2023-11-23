@@ -37,10 +37,6 @@ type JwtSession struct {
 
 type User = game.Player
 
-type TokenResp struct {
-	Token string `json:"token"`
-}
-
 func NewSession(user User, isGuest bool) JwtSession {
 	expiry := time.Now().Add(24 * time.Hour)
 	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
@@ -81,6 +77,10 @@ func (server *AuthServer) GetSession(token string) (*JwtSession, error) {
 	}
 
 	return &session, nil
+}
+
+type TokenResp struct {
+	Token string `json:"token"`
 }
 
 func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Request) {

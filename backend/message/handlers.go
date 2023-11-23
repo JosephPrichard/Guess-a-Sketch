@@ -13,12 +13,31 @@ import (
 )
 
 const (
-	MinChatLen = 5
-	MaxChatLen = 50
+	StartCode   = 1
+	TextCode    = 2
+	DrawCode    = 3
+	ChatCode    = 4
+	FinishCode  = 5
+	BeginCode   = 6
+	JoinCode    = 7
+	LeaveCode   = 8
+	TimeoutCode = 9
+	MinChatLen  = 5
+	MaxChatLen  = 50
 )
 
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
 var ErrMarshal = errors.New("Failed to marshal output data")
+
+type InputPayload struct {
+	Code int             `json:"code"`
+	Msg  json.RawMessage `json:"msg"`
+}
+
+type OutputPayload struct {
+	Code int         `json:"code"`
+	Msg  interface{} `json:"msg"`
+}
 
 func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error) {
 	// deserialize payload message from json
@@ -59,6 +78,11 @@ func handleStartMessage(broker *Broker, player Player) ([]byte, error) {
 	return handleStartGame(broker, player)
 }
 
+type BeginMsg struct {
+	NextWord        string `json:"nextWord"`
+	NextPlayerIndex int    `json:"nextPlayerIndex"`
+}
+
 func handleStartGame(broker *Broker, player Player) ([]byte, error) {
 	room := &broker.room
 
@@ -81,6 +105,12 @@ func handleStartGame(broker *Broker, player Player) ([]byte, error) {
 	payload := OutputPayload{Code: StartCode, Msg: beginMsg}
 	return marshalPayload(payload)
 }
+
+type TextMsg struct {
+	Text string `json:"text"`
+}
+
+type ChatMsg = game.Chat
 
 func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte, error) {
 	text := msg.Text
@@ -105,6 +135,8 @@ func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte,
 	return marshalPayload(payload)
 }
 
+type DrawMsg = game.Circle
+
 // color, radius, x, and y are unvalidated fields for performance
 func handleDrawMessage(room *game.GameRoom, msg DrawMsg, player Player) ([]byte, error) {
 	if room.Stage != game.Playing {
@@ -118,6 +150,11 @@ func handleDrawMessage(room *game.GameRoom, msg DrawMsg, player Player) ([]byte,
 
 	payload := OutputPayload{Code: DrawCode, Msg: msg}
 	return marshalPayload(payload)
+}
+
+type PlayerMsg struct {
+	PlayerIndex int         `json:"playerIndex"` // ensures ordering of players on client and server are the same
+	Player      game.Player `json:"player"`
 }
 
 func HandleJoin(room *game.GameRoom, player game.Player) ([]byte, error) {
@@ -149,6 +186,11 @@ func HandleLeave(room *game.GameRoom, player Player) ([]byte, error) {
 	}
 	payload := OutputPayload{Code: LeaveCode, Msg: playerMsg}
 	return marshalPayload(payload)
+}
+
+type FinishMsg struct {
+	BeginMsg     *BeginMsg `json:"beginMsg"`
+	DrawScoreInc int       `json:"drawScoreInc"`
 }
 
 func HandleReset(broker *Broker) ([]byte, error) {
