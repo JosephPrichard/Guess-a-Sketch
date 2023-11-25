@@ -10,7 +10,7 @@ import { CHAT_CODE, Player, TEXT_CODE } from "../websocket/messages";
 export interface ChatMsg {
     text: string;
     player: Player;
-    guessScoreInc: number;
+    guessPointsInc: number;
 }
 
 const Chat = ({ room }: RoomProps) => {
@@ -57,11 +57,11 @@ const Chat = ({ room }: RoomProps) => {
 const ChatMsg = (props: ChatMsg) => {
     return (
         <Show
-            when={props.guessScoreInc === 0}
+            when={props.guessPointsInc === 0}
             fallback={
                 <div class="ChatMsg">
                     <span>
-                        {props.player.name} guessed the word! (+{props.guessScoreInc})
+                        {props.player.name} guessed the word! (+{props.guessPointsInc})
                     </span>
                 </div>
             }

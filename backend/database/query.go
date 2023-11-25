@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
+	"guessasketch/game"
 	"log"
 	"strings"
 
@@ -72,19 +72,11 @@ func params(queryIdx int, parameterCount int) []interface{} {
 	return parameters
 }
 
-type StatsUpdate struct {
-	playerID        uuid.UUID
-	points          int32
-	win             bool
-	wordsGuessed    int32
-	drawingsGuessed int32
-}
-
-func UpdateStats(db *sqlx.DB, updates []StatsUpdate) {
+func UpdateStats(db *sqlx.DB, results []game.GameResult) {
 	var qb strings.Builder
 	var args []interface{}
 
-	for i, u := range updates {
+	for i, r := range results {
 		query := `
 			UPDATE players 
 			SET points = points + $%d,
@@ -93,9 +85,13 @@ func UpdateStats(db *sqlx.DB, updates []StatsUpdate) {
 				drawings_guessed = drawings_guessed + $%d
 			WHERE id = $%d;
 		`
+		winInc := 0
+		if r.Win {
+			winInc = 1
+		}
 		parameters := params(i, 5)
 		qb.WriteString(fmt.Sprintf(query, parameters...))
-		args = append(args, u.points, u.win, u.wordsGuessed, u.drawingsGuessed, u.playerID)
+		args = append(args, r.Points, winInc, r.WordsGuessed, r.DrawingsGuessed, r.PlayerID.String())
 	}
 
 	_, err := db.Query(qb.String(), args)
@@ -104,21 +100,13 @@ func UpdateStats(db *sqlx.DB, updates []StatsUpdate) {
 	}
 }
 
-func CreateDrawings(db *sqlx.DB, drawings []Drawing) error {
-	var qb strings.Builder
-	var args []interface{}
-
-	for i, d := range drawings {
-		query := "INSERT INTO players (id, created_by, signature) VALUES ($%s, $%s, $%s)"
-		parameters := params(i, 3)
-		qb.WriteString(fmt.Sprintf(query, parameters...))
-		args = append(args, d.ID, d.CreatedBy, d.Signature)
-	}
-
-	_, err := db.Query(qb.String(), args)
-	if err != nil {
-		log.Printf("Failed to insert drawing %s", err.Error())
-		return errors.New("Failed to insert drawings")
-	}
+func SaveDrawing(db *sqlx.DB, d game.Drawing) error {
+	//drawing := game.Drawing{}
+	//query := "INSERT INTO players (id, created_by, saved_by, signature) VALUES ($1, $2, $3, $4)"
+	//_, err := db.Query(query, d.ID, d.CreatedBy, d.SavedBy, d.Signature)
+	//if err != nil {
+	//	log.Printf("Failed to insert d %s", err.Error())
+	//	return errors.New("Failed to insert drawings")
+	//}
 	return nil
 }

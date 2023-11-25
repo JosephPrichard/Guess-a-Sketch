@@ -30,7 +30,7 @@ func (server *AuthServer) keyFunc(_ *jwt.Token) (interface{}, error) {
 }
 
 type JwtSession struct {
-	user  User
+	user  game.Player
 	Guest bool
 	jwt.RegisteredClaims
 }
@@ -42,7 +42,7 @@ func NewSession(user User, isGuest bool) JwtSession {
 	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
 	return JwtSession{
 		user:             user,
-		Guest:            false,
+		Guest:            isGuest,
 		RegisteredClaims: claims,
 	}
 }

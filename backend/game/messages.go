@@ -2,13 +2,12 @@
  * Copyright (c) Joseph Prichard 2023
  */
 
-package message
+package game
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"guessasketch/game"
 	"log"
 )
 
@@ -22,6 +21,7 @@ const (
 	JoinCode    = 7
 	LeaveCode   = 8
 	TimeoutCode = 9
+	SaveCode    = 10
 	MinChatLen  = 5
 	MaxChatLen  = 50
 )
@@ -39,7 +39,7 @@ type OutputPayload struct {
 	Msg  interface{} `json:"msg"`
 }
 
-func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error) {
+func HandleMessage(room *Room, message []byte, player Player) ([]byte, error) {
 	// deserialize payload message from json
 	var payload InputPayload
 	err := json.Unmarshal(message, &payload)
@@ -50,32 +50,35 @@ func HandleMessage(broker *Broker, message []byte, player Player) ([]byte, error
 
 	switch payload.Code {
 	case StartCode:
-		if err != nil {
-			return nil, ErrUnMarshal
-		}
-		return handleStartMessage(broker, player)
+		return handleStartMessage(room, player)
 	case TextCode:
 		var inputMsg TextMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return nil, ErrUnMarshal
 		}
-		return handleTextMessage(&broker.room, inputMsg, player)
+		return handleTextMessage(&room.state, inputMsg, player)
 	case DrawCode:
 		var inputMsg DrawMsg
 		err = json.Unmarshal(payload.Msg, &inputMsg)
 		if err != nil {
 			return nil, ErrUnMarshal
 		}
-		return handleDrawMessage(&broker.room, inputMsg, player)
+		return handleDrawMessage(&room.state, inputMsg, player)
+	case SaveCode:
+		drawing, err := room.state.Turn.CaptureDrawing()
+		if err != nil {
+			return nil, err
+		}
+		err = room.events.OnSaveDrawing(drawing)
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
 	default:
 		log.Println("Cannot handle unknown message type")
 		return nil, errors.New("No matching message types for message")
 	}
-}
-
-func handleStartMessage(broker *Broker, player Player) ([]byte, error) {
-	return handleStartGame(broker, player)
 }
 
 type BeginMsg struct {
@@ -83,24 +86,24 @@ type BeginMsg struct {
 	NextPlayerIndex int    `json:"nextPlayerIndex"`
 }
 
-func handleStartGame(broker *Broker, player Player) ([]byte, error) {
-	room := &broker.room
+func handleStartMessage(room *Room, player Player) ([]byte, error) {
+	state := &room.state
 
-	if room.PlayerIsNotHost(player) {
+	if state.PlayerIsNotHost(player) {
 		return nil, errors.New("Player must be the host to start the game")
 	}
-	if room.Stage == game.Playing {
+	if state.Stage == Playing {
 		return nil, errors.New("Cannot start a game that is already started")
 	}
 
-	room.StartGame()
+	state.StartGame()
 
-	broker.StartResetTimer(room.Settings.TimeLimitSecs)
-	broker.PostponeExpiration()
+	room.StartResetTimer(state.Settings.TimeLimitSecs)
+	room.PostponeExpiration()
 
 	beginMsg := BeginMsg{
-		NextWord:        room.Turn.CurrWord,
-		NextPlayerIndex: room.Turn.CurrPlayerIndex,
+		NextWord:        state.Turn.CurrWord,
+		NextPlayerIndex: state.Turn.CurrPlayerIndex,
 	}
 	payload := OutputPayload{Code: StartCode, Msg: beginMsg}
 	return marshalPayload(payload)
@@ -110,9 +113,9 @@ type TextMsg struct {
 	Text string `json:"text"`
 }
 
-type ChatMsg = game.Chat
+type ChatMsg = Chat
 
-func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte, error) {
+func handleTextMessage(state *GameState, msg TextMsg, player Player) ([]byte, error) {
 	text := msg.Text
 	if len(text) > MaxChatLen || len(text) < MinChatLen {
 		return nil, fmt.Errorf("Chat message must be less than %d characters in length and more than %d", MaxChatLen, MinChatLen)
@@ -120,14 +123,14 @@ func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte,
 
 	newChatMessage := ChatMsg{Player: player}
 
-	scoreInc := room.OnGuess(player, text)
-	if scoreInc == 0 {
+	pointsInc := state.OnGuess(player, text)
+	if pointsInc == 0 {
 		// only set the text for a failed guess
 		newChatMessage.Text = text
 	}
-	newChatMessage.GuessScoreInc = scoreInc
+	newChatMessage.GuessPointsInc = pointsInc
 
-	room.AddChat(newChatMessage)
+	state.AddChat(newChatMessage)
 
 	log.Printf("Chat message, %s: %s", player, msg.Text)
 
@@ -135,11 +138,11 @@ func handleTextMessage(room *game.GameRoom, msg TextMsg, player Player) ([]byte,
 	return marshalPayload(payload)
 }
 
-type DrawMsg = game.Circle
+type DrawMsg = Circle
 
 // color, radius, x, and y are unvalidated fields for performance
-func handleDrawMessage(room *game.GameRoom, msg DrawMsg, player Player) ([]byte, error) {
-	if room.Stage != game.Playing {
+func handleDrawMessage(room *GameState, msg DrawMsg, player Player) ([]byte, error) {
+	if room.Stage != Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
 	if player.ID != room.GetCurrPlayer().ID {
@@ -153,18 +156,18 @@ func handleDrawMessage(room *game.GameRoom, msg DrawMsg, player Player) ([]byte,
 }
 
 type PlayerMsg struct {
-	PlayerIndex int         `json:"playerIndex"` // ensures ordering of players on client and server are the same
-	Player      game.Player `json:"player"`
+	PlayerIndex int    `json:"playerIndex"` // ensures ordering of players on client and server are the same
+	Player      Player `json:"player"`
 }
 
-func HandleJoin(room *game.GameRoom, player game.Player) ([]byte, error) {
-	err := room.Join(player)
+func HandleJoin(state *GameState, player Player) ([]byte, error) {
+	err := state.Join(player)
 	if err != nil {
 		return nil, err
 	}
 
 	// broadcast the new player to all subscribers
-	lastIndex := len(room.Players) - 1
+	lastIndex := len(state.Players) - 1
 	playerMsg := PlayerMsg{
 		PlayerIndex: lastIndex,
 		Player:      player,
@@ -173,10 +176,10 @@ func HandleJoin(room *game.GameRoom, player game.Player) ([]byte, error) {
 	return marshalPayload(payload)
 }
 
-func HandleLeave(room *game.GameRoom, player Player) ([]byte, error) {
-	leaveIndex := room.Leave(player)
+func HandleLeave(state *GameState, player Player) ([]byte, error) {
+	leaveIndex := state.Leave(player)
 	if leaveIndex < 0 {
-		return nil, errors.New("Failed to leave the room, player couldn't be found")
+		return nil, errors.New("Failed to leave the state, player couldn't be found")
 	}
 
 	// broadcast the leaving player to all subscribers
@@ -193,37 +196,32 @@ type FinishMsg struct {
 	DrawScoreInc int       `json:"drawScoreInc"`
 }
 
-func HandleReset(broker *Broker) ([]byte, error) {
-	room := &broker.room
-	log.Printf("Resetting the game for code %s", room.Code)
+func HandleReset(room *Room) ([]byte, error) {
+	state := &room.state
+	log.Printf("Resetting the game for code %s", state.Code)
 
-	broker.PostponeExpiration()
+	room.PostponeExpiration()
 
-	scoreInc := room.OnResetScoreInc()
+	pointsInc := state.OnReset()
 
 	var beginMsg *BeginMsg = nil
-	if room.CurrRound < room.Settings.TotalRounds {
-		room.StartGame()
-		broker.StartResetTimer(room.Settings.TimeLimitSecs)
+	if state.HasMoreRounds() {
+		state.StartGame()
+		room.StartResetTimer(state.Settings.TimeLimitSecs)
 
 		beginMsg = &BeginMsg{
-			NextWord:        room.Turn.CurrWord,
-			NextPlayerIndex: room.Turn.CurrPlayerIndex,
+			NextWord:        state.Turn.CurrWord,
+			NextPlayerIndex: state.Turn.CurrPlayerIndex,
 		}
 	} else {
-		room.FinishGame()
+		state.FinishGame()
 	}
 
 	finishMsg := FinishMsg{
 		BeginMsg:     beginMsg,
-		DrawScoreInc: scoreInc,
+		DrawScoreInc: pointsInc,
 	}
 	payload := OutputPayload{Code: FinishCode, Msg: finishMsg}
-	return marshalPayload(payload)
-}
-
-func HandleTimeoutMessage() ([]byte, error) {
-	payload := OutputPayload{Code: TimeoutCode}
 	return marshalPayload(payload)
 }
 

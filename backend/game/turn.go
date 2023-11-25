@@ -5,6 +5,9 @@
 package game
 
 import (
+	"bytes"
+	"encoding/gob"
+	"errors"
 	"github.com/google/uuid"
 	"strings"
 	"time"
@@ -24,6 +27,10 @@ type Circle struct {
 	X         uint16 `json:"x"`
 	Y         uint16 `json:"y"`
 	Connected bool   `json:"connected"`
+}
+
+type Drawing struct {
+	Signature string
 }
 
 func NewGameTurn() GameTurn {
@@ -68,4 +75,14 @@ func (turn *GameTurn) SetGuesser(player *Player) {
 
 func (turn *GameTurn) Draw(stroke Circle) {
 	turn.Canvas = append(turn.Canvas, stroke)
+}
+
+func (turn *GameTurn) CaptureDrawing() (Drawing,error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(turn.Canvas)
+	if err != nil {
+		return Drawing{}, errors.New("Failed to capture the drawing")
+	}
+	return Drawing{Signature: buf.String()}, nil
 }

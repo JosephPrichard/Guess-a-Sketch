@@ -7,8 +7,9 @@ package server
 import (
 	crand "crypto/rand"
 	"encoding/hex"
+	"github.com/jmoiron/sqlx"
+	"guessasketch/database"
 	"guessasketch/game"
-	"guessasketch/message"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,13 +20,19 @@ import (
 
 type RoomsServer struct {
 	upgrade      websocket.Upgrader
-	brokerage    *message.Brokerage
+	rooms        *game.Rooms
 	gameWordBank []string
 	authServer   *AuthServer
 	playerServer *PlayerServer
+	db           *sqlx.DB
+	eventHandler RoomEventsHandler
 }
 
-func NewRoomsServer(gameWordBank []string, authServer *AuthServer, playerServer *PlayerServer) *RoomsServer {
+type RoomEventsHandler struct {
+	db *sqlx.DB
+}
+
+func NewRoomsServer(db *sqlx.DB, gameWordBank []string, authServer *AuthServer, playerServer *PlayerServer) *RoomsServer {
 	upgrade := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -35,10 +42,12 @@ func NewRoomsServer(gameWordBank []string, authServer *AuthServer, playerServer 
 	}
 	return &RoomsServer{
 		upgrade:      upgrade,
-		brokerage:    message.NewBrokerMap(time.Minute),
+		rooms:        game.NewRooms(time.Minute),
 		gameWordBank: gameWordBank,
 		authServer:   authServer,
 		playerServer: playerServer,
+		db:           db,
+		eventHandler: RoomEventsHandler{db},
 	}
 }
 
@@ -58,7 +67,7 @@ func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 		offset = int(parsedOffset)
 	}
 
-	rooms := server.brokerage.Codes(offset, 20)
+	rooms := server.rooms.Codes(offset, 20)
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, rooms)
 }
@@ -80,7 +89,7 @@ type RoomCodeResp struct {
 func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	EnableCors(&w)
 
-	// generate a code, create a broker, start it, then store it in the map
+	// generate a code, create a room, start it, then store it in the map
 	code, err := HexCode(8)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to generate a valid error code")
@@ -103,14 +112,22 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	broker := message.NewBroker(code, settings)
-	log.Printf("Starting a broker for code %s", code)
-	go broker.Start()
-	server.brokerage.Store(code, broker)
+	room := game.NewRoom(code, settings, &server.eventHandler)
+	log.Printf("Starting a room for code %s", code)
+	go room.Start()
+	server.rooms.Store(code, room)
 
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, roomCode)
+}
+
+func (handler RoomEventsHandler) OnShutdown(results []game.GameResult) {
+	database.UpdateStats(handler.db, results)
+}
+
+func (handler RoomEventsHandler) OnSaveDrawing(drawing game.Drawing) error {
+	return database.SaveDrawing(handler.db, drawing)
 }
 
 func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
@@ -131,8 +148,8 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		player = GuestUser()
 	}
 
-	broker := server.brokerage.Load(code)
-	if broker == nil {
+	room := server.rooms.Load(code)
+	if room == nil {
 		WriteError(w, http.StatusNotFound, "Cannot find room for provided code")
 		return
 	}
@@ -143,21 +160,21 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// create a new subscription channel and join the broker with it
-	subscriber := make(message.Subscriber)
-	broker.Subscribe <- message.SubscriberMsg{Subscriber: subscriber, Player: player}
+	// create a new subscription channel and join the room with it
+	subscriber := make(game.Subscriber)
+	room.Subscribe <- game.SubscriberMsg{Subscriber: subscriber, Player: player}
 
 	log.Printf("Joined room %s with name %s and id %s", code, player.Name, player.ID)
 
 	go subscriberListener(ws, subscriber)
-	go socketListener(ws, broker, subscriber)
+	go socketListener(ws, room, subscriber)
 }
 
-// reads messages from socket and sends them to broker
-func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber message.Subscriber) {
+// reads messages from socket and sends them to room
+func socketListener(ws *websocket.Conn, room *game.Room, subscriber game.Subscriber) {
 	defer func() {
-		// unsubscribes from the broker when the websocket is closed
-		broker.Unsubscribe <- subscriber
+		// unsubscribes from the room when the websocket is closed
+		room.Unsubscribe <- subscriber
 		_ = ws.Close()
 		log.Printf("Socket listener close function called")
 		if panicInfo := recover(); panicInfo != nil {
@@ -170,14 +187,14 @@ func socketListener(ws *websocket.Conn, broker *message.Broker, subscriber messa
 			log.Printf("Client closed connection with err %s", err.Error())
 			return
 		}
-		// read any message from the socket and broadcast it to the broker
+		// read any message from the socket and broadcast it to the room
 		log.Println("Receiving message", string(p))
-		broker.SendMessage <- message.SentMsg{Message: p, Sender: subscriber}
+		room.SendMessage <- game.SentMsg{Message: p, Sender: subscriber}
 	}
 }
 
 // reads messages from a subscribed channel and sends them to socket
-func subscriberListener(ws *websocket.Conn, subscriber message.Subscriber) {
+func subscriberListener(ws *websocket.Conn, subscriber game.Subscriber) {
 	defer func() {
 		// closes the websocket connection when the subscriber is informed no more messages will be sent
 		log.Println("Subscriber channel was closed")

@@ -65,9 +65,3 @@ func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, players)
 }
-
-type GameResult = database.StatsUpdate
-
-func (server *PlayerServer) ProcessGameResults(results []GameResult) {
-	database.UpdateStats(server.db, results)
-}

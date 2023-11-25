@@ -52,7 +52,7 @@ func main() {
 
 	authServer := server.NewAuthServer(jwtSecretKey)
 	playerServer := server.NewPlayerServer(db, authServer)
-	roomsServer := server.NewRoomsServer(gameWordBank, authServer, playerServer)
+	roomsServer := server.NewRoomsServer(db, gameWordBank, authServer, playerServer)
 
 	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)
