@@ -7,47 +7,28 @@ package server
 import (
 	crand "crypto/rand"
 	"encoding/hex"
-	"github.com/jmoiron/sqlx"
-	"guessasketch/database"
+	"github.com/gorilla/websocket"
 	"guessasketch/game"
 	"log"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 type RoomsServer struct {
-	upgrade      websocket.Upgrader
-	rooms        *game.Rooms
-	gameWordBank []string
-	authServer   *AuthServer
-	playerServer *PlayerServer
-	db           *sqlx.DB
-	eventHandler RoomEventsHandler
+	upgrade       websocket.Upgrader
+	rooms         game.RoomsStore
+	authenticator Authenticator
+	gameWordBank  []string
+	eventHandler  game.EventHandler
 }
 
-type RoomEventsHandler struct {
-	db *sqlx.DB
-}
-
-func NewRoomsServer(db *sqlx.DB, gameWordBank []string, authServer *AuthServer, playerServer *PlayerServer) *RoomsServer {
-	upgrade := websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-	upgrade.CheckOrigin = func(r *http.Request) bool {
-		return true
-	}
+func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, eventHandler game.EventHandler, gameWordBank []string) *RoomsServer {
 	return &RoomsServer{
-		upgrade:      upgrade,
-		rooms:        game.NewRooms(time.Minute),
-		gameWordBank: gameWordBank,
-		authServer:   authServer,
-		playerServer: playerServer,
-		db:           db,
-		eventHandler: RoomEventsHandler{db},
+		upgrade:       CreateUpgrade(),
+		rooms:         rooms,
+		authenticator: authenticator,
+		eventHandler:  eventHandler,
+		gameWordBank:  gameWordBank,
 	}
 }
 
@@ -112,7 +93,8 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	room := game.NewRoom(code, settings, &server.eventHandler)
+	initialState := game.NewGameState(code, settings)
+	room := game.NewRoom(initialState, server.eventHandler)
 	log.Printf("Starting a room for code %s", code)
 	go room.Start()
 	server.rooms.Store(code, room)
@@ -120,14 +102,6 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, roomCode)
-}
-
-func (handler RoomEventsHandler) OnShutdown(results []game.GameResult) {
-	database.UpdateStats(handler.db, results)
-}
-
-func (handler RoomEventsHandler) OnSaveDrawing(drawing game.Drawing) error {
-	return database.SaveDrawing(handler.db, drawing)
 }
 
 func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +114,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	var player User
 	if token != "" {
 		// if a session token is specified, attempt to get the id for the user
-		session, err := server.authServer.GetSession(token)
+		session, err := server.authenticator.GetSession(token)
 		if err != nil && session != nil {
 			player = session.user
 		}

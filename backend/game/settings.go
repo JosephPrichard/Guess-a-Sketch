@@ -25,8 +25,15 @@ type RoomSettings struct {
 	IsPublic       bool     `json:"isPublic"`       // whether the room is publicly accessible of not
 }
 
+// creates new default settings
+func DefaultSettings() RoomSettings {
+	var settings RoomSettings
+	SettingsWithDefaults(&settings)
+	return settings
+}
+
+// applies default settings to preexisting settings struct any zero value field
 func SettingsWithDefaults(settings *RoomSettings) {
-	// set the default settings for zero valued fields
 	if settings.PlayerLimit == 0 {
 		settings.PlayerLimit = 8
 	}

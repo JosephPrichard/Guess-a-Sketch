@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"guessasketch/game"
 	"guessasketch/server"
 	"log"
 	"math/rand"
@@ -52,7 +53,10 @@ func main() {
 
 	authServer := server.NewAuthServer(jwtSecretKey)
 	playerServer := server.NewPlayerServer(db, authServer)
-	roomsServer := server.NewRoomsServer(db, gameWordBank, authServer, playerServer)
+	eventServer := server.NewEventServer(db)
+
+	roomsStore := game.NewRoomsMap(time.Minute)
+	roomsServer := server.NewRoomsServer(roomsStore, authServer, eventServer, gameWordBank)
 
 	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)

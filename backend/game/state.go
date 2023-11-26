@@ -49,7 +49,7 @@ type Chat struct {
 	GuessPointsInc int    `json:"guessPointsInc"` // if this is larger than 0, player guessed correctly
 }
 
-func NewGameRoom(code string, settings RoomSettings) GameState {
+func NewGameState(code string, settings RoomSettings) GameState {
 	return GameState{
 		Code:       code,
 		Players:    make([]Player, 0),

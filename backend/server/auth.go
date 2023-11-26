@@ -17,6 +17,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type Authenticator interface {
+	GetSession(token string) (*JwtSession, error)
+}
+
 type AuthServer struct {
 	jwtKey []byte
 }
@@ -27,28 +31,6 @@ func NewAuthServer(jwtKey string) *AuthServer {
 
 func (server *AuthServer) keyFunc(_ *jwt.Token) (interface{}, error) {
 	return server.jwtKey, nil
-}
-
-type JwtSession struct {
-	user  game.Player
-	Guest bool
-	jwt.RegisteredClaims
-}
-
-type User = game.Player
-
-func NewSession(user User, isGuest bool) JwtSession {
-	expiry := time.Now().Add(24 * time.Hour)
-	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
-	return JwtSession{
-		user:             user,
-		Guest:            isGuest,
-		RegisteredClaims: claims,
-	}
-}
-
-func GuestUser() User {
-	return User{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
 }
 
 func (server *AuthServer) GenerateToken(session JwtSession) (string, error) {
@@ -116,4 +98,26 @@ func (server *AuthServer) Login(w http.ResponseWriter, r *http.Request) {
 
 func (server *AuthServer) Logout(w http.ResponseWriter, r *http.Request) {
 
+}
+
+type JwtSession struct {
+	user  game.Player
+	Guest bool
+	jwt.RegisteredClaims
+}
+
+type User = game.Player
+
+func NewSession(user User, isGuest bool) JwtSession {
+	expiry := time.Now().Add(24 * time.Hour)
+	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
+	return JwtSession{
+		user:             user,
+		Guest:            isGuest,
+		RegisteredClaims: claims,
+	}
+}
+
+func GuestUser() User {
+	return User{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
 }

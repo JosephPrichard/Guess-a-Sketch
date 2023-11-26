@@ -43,7 +43,7 @@ type SubscriberMsg struct {
 	Player     Player
 }
 
-func NewRoom(code string, settings RoomSettings, events EventHandler) *Room {
+func NewRoom(initialState GameState, events EventHandler) *Room {
 	// create the room with all channels and state
 	room := &Room{
 		Subscribe:   make(chan SubscriberMsg),
@@ -53,8 +53,8 @@ func NewRoom(code string, settings RoomSettings, events EventHandler) *Room {
 		Term:        make(chan int),
 		events:      events,
 		subscribers: make(map[Subscriber]Player),
-		state:       NewGameRoom(code, settings),
-		IsPublic:    settings.IsPublic,
+		state:       initialState,
+		IsPublic:    initialState.Settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
 	}
 	room.PostponeExpiration()
 	return room

@@ -7,6 +7,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net/http"
@@ -63,4 +64,15 @@ func EnableCors(w *http.ResponseWriter) {
 	header := (*w).Header()
 	header.Set("Access-Control-Allow-Origin", "*")
 	header.Set("Access-Control-Allow-Headers", "*")
+}
+
+func CreateUpgrade() websocket.Upgrader {
+	upgrade := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	upgrade.CheckOrigin = func(r *http.Request) bool {
+		return true
+	}
+	return upgrade
 }
