@@ -42,21 +42,21 @@ func main() {
 
 	gameWordBank := strings.Split(words, "\n")
 
-	dataSource := fmt.Sprintf(
-		"user=%s dbname=%s host=%s password=%s port=%s sslmode=disable",
+	dataSource := fmt.Sprintf("user=%s dbname=%s host=%s password=%s port=%s sslmode=disable",
 		dbUser, dbName, dbHost, dbPass, dbPort)
+
 	db, err := sqlx.Connect("postgres", dataSource)
 	if err != nil {
 		log.Fatalln(err)
 		return
 	}
 
+	roomServer := server.NewRoomServer(db)
 	authServer := server.NewAuthServer(jwtSecretKey)
 	playerServer := server.NewPlayerServer(db, authServer)
-	eventServer := server.NewEventServer(db)
 
 	roomsStore := game.NewRoomsMap(time.Minute)
-	roomsServer := server.NewRoomsServer(roomsStore, authServer, eventServer, gameWordBank)
+	roomsServer := server.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
 
 	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)

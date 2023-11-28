@@ -66,14 +66,12 @@ func HandleMessage(room *Room, message []byte, player Player) ([]byte, error) {
 		}
 		return handleDrawMessage(&room.state, inputMsg, player)
 	case SaveCode:
-		drawing, err := room.state.Turn.CaptureDrawing()
+		capture, err := room.state.Capture()
 		if err != nil {
 			return nil, err
 		}
-		err = room.events.OnSaveDrawing(drawing)
-		if err != nil {
-			return nil, err
-		}
+		capture.SavedBy = &player
+		room.worker.DoCapture(capture)
 		return nil, nil
 	default:
 		log.Println("Cannot handle unknown message type")
@@ -141,15 +139,15 @@ func handleTextMessage(state *GameState, msg TextMsg, player Player) ([]byte, er
 type DrawMsg = Circle
 
 // color, radius, x, and y are unvalidated fields for performance
-func handleDrawMessage(room *GameState, msg DrawMsg, player Player) ([]byte, error) {
-	if room.Stage != Playing {
+func handleDrawMessage(state *GameState, msg DrawMsg, player Player) ([]byte, error) {
+	if state.Stage != Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
-	if player.ID != room.GetCurrPlayer().ID {
+	if player.ID != state.GetCurrPlayer().ID {
 		return nil, errors.New("Player cannot draw on the canvas")
 	}
 
-	room.Turn.Draw(msg)
+	state.Draw(msg)
 
 	payload := OutputPayload{Code: DrawCode, Msg: msg}
 	return marshalPayload(payload)

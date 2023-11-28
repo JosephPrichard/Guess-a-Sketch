@@ -45,19 +45,18 @@ func (auth *MockAuthenticator) GetSession(_ string) (*JwtSession, error) {
 	return nil, nil
 }
 
-// mock implementation of event hooks that does nothing - we don't care about testing this
-type MockEventHandler struct {
+// mock implementation of worker that does nothing - we don't care about testing this
+type MockWorker struct {
 }
 
-func (server MockEventHandler) OnShutdown(_ []game.GameResult) {
+func (worker MockWorker) DoShutdown(_ []game.GameResult) {
 }
 
-func (server MockEventHandler) OnSaveDrawing(_ game.Drawing) error {
-	return nil
+func (worker MockWorker) DoCapture(_ game.Snapshot) {
 }
 
 func TestCreateRoom(t *testing.T) {
-	roomsServer := NewRoomsServer(&MockRoomsStore{}, &MockAuthenticator{}, &MockEventHandler{}, []string{})
+	roomsServer := NewRoomsServer(&MockRoomsStore{}, &MockAuthenticator{}, &MockWorker{}, []string{})
 
 	testSettings := game.DefaultSettings()
 
@@ -84,12 +83,12 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	testCode := "123abc"
 	initialState := game.NewGameState(testCode, game.DefaultSettings())
 
-	testRoom := game.NewRoom(initialState, &MockEventHandler{})
+	testRoom := game.NewRoom(initialState, &MockWorker{})
 	mockRooms := MockRoomsStore{}
 	go testRoom.Start()
 	mockRooms.Store(testCode, testRoom)
 
-	roomsServer := NewRoomsServer(&mockRooms, &MockAuthenticator{}, &MockEventHandler{}, []string{})
+	roomsServer := NewRoomsServer(&mockRooms, &MockAuthenticator{}, &MockWorker{}, []string{})
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 
 	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + testCode

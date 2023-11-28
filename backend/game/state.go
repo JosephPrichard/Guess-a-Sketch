@@ -5,11 +5,14 @@
 package game
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -31,6 +34,28 @@ type GameState struct {
 	Turn       GameTurn            `json:"turn"`       // stores the current game turn
 }
 
+type GameTurn struct {
+	CurrWord        string             `json:"currWord"`        // current word to guess in session
+	CurrPlayerIndex int                `json:"currPlayerIndex"` // index of player drawing on canvas
+	Canvas          []Circle           `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
+	guessers        map[uuid.UUID]bool // map storing each player ID who has guessed correctly this game
+	startTimeSecs   int64              // start time in milliseconds (unix epoch)
+}
+
+type Circle struct {
+	Color     uint8  `json:"color"`
+	Radius    uint8  `json:"radius"`
+	X         uint16 `json:"x"`
+	Y         uint16 `json:"y"`
+	Connected bool   `json:"connected"`
+}
+
+type Snapshot struct {
+	SavedBy   *Player
+	CreatedBy *Player
+	Canvas    string
+}
+
 type Score struct {
 	Points   int `json:"points"`
 	Words    int
@@ -50,29 +75,35 @@ type Chat struct {
 }
 
 func NewGameState(code string, settings RoomSettings) GameState {
+	initialTurn := GameTurn{
+		Canvas:          make([]Circle, 0),
+		CurrPlayerIndex: -1,
+		startTimeSecs:   time.Now().Unix(),
+		guessers:        make(map[uuid.UUID]bool),
+	}
 	return GameState{
 		Code:       code,
 		Players:    make([]Player, 0),
 		ScoreBoard: make(map[uuid.UUID]Score),
 		ChatLog:    make([]Chat, 0),
 		Settings:   settings,
-		Turn:       NewGameTurn(),
+		Turn:       initialTurn,
 	}
 }
 
-func (room *GameState) GetCurrPlayer() *Player {
-	if room.Turn.CurrPlayerIndex < 0 {
+func (state *GameState) GetCurrPlayer() *Player {
+	if state.Turn.CurrPlayerIndex < 0 {
 		return &Player{}
 	}
-	return &room.Players[room.Turn.CurrPlayerIndex]
+	return &state.Players[state.Turn.CurrPlayerIndex]
 }
 
-func (room *GameState) PlayerIsNotHost(player Player) bool {
-	return len(room.Players) < 1 || room.Players[0] != player
+func (state *GameState) PlayerIsNotHost(player Player) bool {
+	return len(state.Players) < 1 || state.Players[0] != player
 }
 
-func (room *GameState) ToMessage() []byte {
-	b, err := json.Marshal(room)
+func (state *GameState) ToMessage() []byte {
+	b, err := json.Marshal(state)
 	if err != nil {
 		log.Println(err.Error())
 		return []byte{}
@@ -80,10 +111,10 @@ func (room *GameState) ToMessage() []byte {
 	return b
 }
 
-func (room *GameState) PlayerIndex(playerToFind Player) int {
+func (state *GameState) PlayerIndex(playerToFind Player) int {
 	// find player in the slice
 	index := -1
-	for i, player := range room.Players {
+	for i, player := range state.Players {
 		if player == playerToFind {
 			index = i
 			break
@@ -92,103 +123,166 @@ func (room *GameState) PlayerIndex(playerToFind Player) int {
 	return index
 }
 
-func (room *GameState) Join(player Player) error {
-	_, exists := room.ScoreBoard[player.ID]
+func (state *GameState) Join(player Player) error {
+	_, exists := state.ScoreBoard[player.ID]
 	if exists {
-		return errors.New("Player cannot join a room they are already in")
+		return errors.New("Player cannot join a state they are already in")
 	}
-	if len(room.Players) >= room.Settings.PlayerLimit {
-		return errors.New("Player cannot join, room is at player limit")
+	if len(state.Players) >= state.Settings.PlayerLimit {
+		return errors.New("Player cannot join, state is at player limit")
 	}
-	room.Players = append(room.Players, player)
-	room.ScoreBoard[player.ID] = Score{}
+	state.Players = append(state.Players, player)
+	state.ScoreBoard[player.ID] = Score{}
 	return nil
 }
 
-func (room *GameState) Leave(playerToLeave Player) int {
-	index := room.PlayerIndex(playerToLeave)
+func (state *GameState) Leave(playerToLeave Player) int {
+	index := state.PlayerIndex(playerToLeave)
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
 		return -1
 	}
 	// delete player from the slice by creating a new slice without the index
-	room.Players = append(room.Players[:index], room.Players[index+1:]...)
+	state.Players = append(state.Players[:index], state.Players[index+1:]...)
 	return index
 }
 
 // starts the game and returns a snapshot of the settings used to start the game
-func (room *GameState) StartGame() {
-	room.Stage = Playing
+func (state *GameState) StartGame() {
+	state.Stage = Playing
 
-	room.Turn.ClearGuessers()
-	room.Turn.ClearCanvas()
+	state.ClearGuessers()
+	state.ClearCanvas()
 
-	room.setNextWord()
-	room.cycleCurrPlayer()
+	state.setNextWord()
+	state.cycleCurrPlayer()
 
-	room.Turn.ResetStartTime()
+	state.ResetStartTime()
 }
 
-func (room *GameState) FinishGame() {
-	room.Stage = Post
+func (state *GameState) FinishGame() {
+	state.Stage = Post
 }
 
-func (room *GameState) setNextWord() {
+func (state *GameState) setNextWord() {
 	// pick a new word from the shared or custom word bank
 	bank := rand.Intn(2)
 	if bank == 0 {
-		index := rand.Intn(len(room.Settings.SharedWordBank))
-		room.Turn.CurrWord = room.Settings.SharedWordBank[index]
+		index := rand.Intn(len(state.Settings.SharedWordBank))
+		state.Turn.CurrWord = state.Settings.SharedWordBank[index]
 	} else {
-		index := rand.Intn(len(room.Settings.CustomWordBank))
-		room.Turn.CurrWord = room.Settings.CustomWordBank[index]
+		index := rand.Intn(len(state.Settings.CustomWordBank))
+		state.Turn.CurrWord = state.Settings.CustomWordBank[index]
 	}
 }
 
-func (room *GameState) cycleCurrPlayer() {
+func (state *GameState) cycleCurrPlayer() {
 	// go to the next player, circle back around when we reach the end
-	room.Turn.CurrPlayerIndex += 1
-	if room.Turn.CurrPlayerIndex >= len(room.Players) {
-		room.Turn.CurrPlayerIndex = 0
-		room.CurrRound += 1
+	state.Turn.CurrPlayerIndex += 1
+	if state.Turn.CurrPlayerIndex >= len(state.Players) {
+		state.Turn.CurrPlayerIndex = 0
+		state.CurrRound += 1
 	}
 }
 
 // handlers a player's guess and returns the increase in the score of player due to the guess
-func (room *GameState) OnGuess(player Player, text string) int {
+func (state *GameState) OnGuess(player Player, text string) int {
 	// nothing happens if a player guesses when game is not in session
-	if room.Stage != Playing {
+	if state.Stage != Playing {
 		return 0
 	}
 	// current player cannot make a guess
-	if player.ID == room.GetCurrPlayer().ID {
+	if player.ID == state.GetCurrPlayer().ID {
 		return 0
 	}
 	// check whether the text is a correct guess or not, if not, do not increase the score
-	if !room.Turn.ContainsCurrWord(text) {
+	if !state.ContainsCurrWord(text) {
 		return 0
 	}
 	// cannot increase score of player if they already guessed
-	if room.Turn.guessers[player.ID] {
+	if state.Turn.guessers[player.ID] {
 		return 0
 	}
 
 	// calculate the score increments for successful guess
-	timeSinceStartSecs := time.Now().Unix() - room.Turn.startTimeSecs
-	timeLimitSecs := room.Settings.TimeLimitSecs
+	timeSinceStartSecs := time.Now().Unix() - state.Turn.startTimeSecs
+	timeLimitSecs := state.Settings.TimeLimitSecs
 	pointsInc := (timeLimitSecs-int(timeSinceStartSecs))/timeLimitSecs*400 + 50
-	room.incScore(&player, Score{Points: pointsInc, Words: 1})
+	state.incScore(&player, Score{Points: pointsInc, Words: 1})
 
-	room.Turn.SetGuesser(&player)
+	state.SetGuesser(&player)
 	return pointsInc
 }
 
-func (room *GameState) incScore(player *Player, s Score) {
-	score, _ := room.ScoreBoard[player.ID]
+func (state *GameState) incScore(player *Player, s Score) {
+	score, _ := state.ScoreBoard[player.ID]
 	score.Points += s.Points
 	score.Words += s.Words
 	score.Drawings += s.Drawings
-	room.ScoreBoard[player.ID] = score
+	state.ScoreBoard[player.ID] = score
+}
+
+func (state *GameState) OnReset() int {
+	pointsInc := state.CalcResetScore()
+	state.incScore(state.GetCurrPlayer(), Score{Points: pointsInc, Drawings: 1})
+	return pointsInc
+}
+
+func (state *GameState) AddChat(chat Chat) {
+	state.ChatLog = append(state.ChatLog, chat)
+}
+
+func (state *GameState) HasMoreRounds() bool {
+	return state.CurrRound < state.Settings.TotalRounds
+}
+
+func (state *GameState) ClearGuessers() {
+	for k := range state.Turn.guessers {
+		delete(state.Turn.guessers, k)
+	}
+}
+
+func (state *GameState) ClearCanvas() {
+	state.Turn.Canvas = state.Turn.Canvas[0:0]
+}
+
+func (state *GameState) ResetStartTime() {
+	state.Turn.startTimeSecs = time.Now().Unix()
+}
+
+func (state *GameState) CalcResetScore() int {
+	return len(state.Turn.guessers) * 50
+}
+
+func (state *GameState) ContainsCurrWord(text string) bool {
+	for _, word := range strings.Split(text, " ") {
+		if word == state.Turn.CurrWord {
+			return true
+		}
+	}
+	return false
+}
+
+func (state *GameState) SetGuesser(player *Player) {
+	state.Turn.guessers[player.ID] = true
+}
+
+func (state *GameState) Draw(stroke Circle) {
+	state.Turn.Canvas = append(state.Turn.Canvas, stroke)
+}
+
+func (state *GameState) Capture() (Snapshot, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(state.Turn.Canvas)
+	if err != nil {
+		return Snapshot{}, errors.New("Failed to capture the drawing")
+	}
+	s := Snapshot{
+		Canvas:    buf.String(),
+		CreatedBy: state.GetCurrPlayer(),
+	}
+	return s, nil
 }
 
 type GameResult struct {
@@ -199,9 +293,9 @@ type GameResult struct {
 	DrawingsGuessed int
 }
 
-func (room *GameState) CreateGameResult() []GameResult {
+func (state *GameState) CreateGameResult() []GameResult {
 	var updates []GameResult
-	for id, score := range room.ScoreBoard {
+	for id, score := range state.ScoreBoard {
 		updates = append(updates, GameResult{
 			PlayerID:        id,
 			Points:          score.Points,
@@ -223,18 +317,4 @@ func (room *GameState) CreateGameResult() []GameResult {
 	}
 
 	return updates
-}
-
-func (room *GameState) OnReset() int {
-	pointsInc := room.Turn.CalcResetScore()
-	room.incScore(room.GetCurrPlayer(), Score{Points: pointsInc, Drawings: 1})
-	return pointsInc
-}
-
-func (room *GameState) AddChat(chat Chat) {
-	room.ChatLog = append(room.ChatLog, chat)
-}
-
-func (room *GameState) HasMoreRounds() bool {
-	return room.CurrRound < room.Settings.TotalRounds
 }

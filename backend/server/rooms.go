@@ -8,6 +8,8 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"github.com/gorilla/websocket"
+	"github.com/jmoiron/sqlx"
+	"guessasketch/database"
 	"guessasketch/game"
 	"log"
 	"net/http"
@@ -18,16 +20,16 @@ type RoomsServer struct {
 	upgrade       websocket.Upgrader
 	rooms         game.RoomsStore
 	authenticator Authenticator
+	worker        game.RoomWorker
 	gameWordBank  []string
-	eventHandler  game.EventHandler
 }
 
-func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, eventHandler game.EventHandler, gameWordBank []string) *RoomsServer {
+func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, worker game.RoomWorker, gameWordBank []string) *RoomsServer {
 	return &RoomsServer{
 		upgrade:       CreateUpgrade(),
 		rooms:         rooms,
 		authenticator: authenticator,
-		eventHandler:  eventHandler,
+		worker:        worker,
 		gameWordBank:  gameWordBank,
 	}
 }
@@ -37,8 +39,8 @@ func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 	offsetStr := query.Get("offsetStr")
-	offset := 0
 
+	offset := 0
 	if offsetStr != "" {
 		parsedOffset, err := strconv.ParseInt(offsetStr, 10, 32)
 		if err != nil {
@@ -94,7 +96,7 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	initialState := game.NewGameState(code, settings)
-	room := game.NewRoom(initialState, server.eventHandler)
+	room := game.NewRoom(initialState, server.worker)
 	log.Printf("Starting a room for code %s", code)
 	go room.Start()
 	server.rooms.Store(code, room)
@@ -186,4 +188,22 @@ func subscriberListener(ws *websocket.Conn, subscriber game.Subscriber) {
 			return
 		}
 	}
+}
+
+type RoomServer struct {
+	db *sqlx.DB
+}
+
+func NewRoomServer(db *sqlx.DB) *RoomServer {
+	return &RoomServer{db}
+}
+
+func (server *RoomServer) DoShutdown(results []game.GameResult) {
+	// perform the batch update stats on a separate goroutine
+	go database.UpdateStats(server.db, results)
+}
+
+func (server *RoomServer) DoCapture(drawing game.Snapshot) {
+	// perform a capture operation on a separate goroutine
+	go database.SaveDrawing(server.db, drawing)
 }

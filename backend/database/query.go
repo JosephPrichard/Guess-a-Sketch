@@ -100,13 +100,15 @@ func UpdateStats(db *sqlx.DB, results []game.GameResult) {
 	}
 }
 
-func SaveDrawing(db *sqlx.DB, d game.Drawing) error {
-	//drawing := game.Drawing{}
-	//query := "INSERT INTO players (id, created_by, saved_by, signature) VALUES ($1, $2, $3, $4)"
-	//_, err := db.Query(query, d.ID, d.CreatedBy, d.SavedBy, d.Signature)
-	//if err != nil {
-	//	log.Printf("Failed to insert d %s", err.Error())
-	//	return errors.New("Failed to insert drawings")
-	//}
-	return nil
+func SaveDrawing(db *sqlx.DB, d game.Snapshot) {
+	drawing := Drawing{
+		SavedBy:   d.SavedBy.ID.String(),
+		CreatedBy: d.CreatedBy.ID.String(),
+		Signature: d.Canvas,
+	}
+	query := "INSERT INTO players (created_by, saved_by, signature) VALUES ($1, $2, $3)"
+	_, err := db.Query(query, drawing.CreatedBy, drawing.SavedBy, drawing.Signature)
+	if err != nil {
+		log.Printf("Failed to insert d %s", err.Error())
+	}
 }

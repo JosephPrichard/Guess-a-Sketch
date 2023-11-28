@@ -11,24 +11,24 @@ import (
 	"time"
 )
 
-// represent a room that a client can send messages to, subscribe to, and hook onto internal events
+// represent a room that a client can send messages to, subscribe to, and hook onto internal worker
 type Room struct {
 	Subscribe   chan SubscriberMsg
 	Unsubscribe chan Subscriber
 	SendMessage chan SentMsg
 	ResetState  chan struct{}
 	Term        chan int
-	events      EventHandler
 	state       GameState
 	subscribers map[Subscriber]Player
 	expireTime  atomic.Int64
 	IsPublic    bool
+	worker      RoomWorker
 }
 
-// messaging layer events called that must be implemented by the caller
-type EventHandler interface {
-	OnShutdown(results []GameResult)
-	OnSaveDrawing(drawing Drawing) error
+// background worker for a room to be implemented by the caller
+type RoomWorker interface {
+	DoShutdown(results []GameResult)
+	DoCapture(snap Snapshot)
 }
 
 type Subscriber = chan []byte
@@ -43,7 +43,7 @@ type SubscriberMsg struct {
 	Player     Player
 }
 
-func NewRoom(initialState GameState, events EventHandler) *Room {
+func NewRoom(initialState GameState, tasks RoomWorker) *Room {
 	// create the room with all channels and state
 	room := &Room{
 		Subscribe:   make(chan SubscriberMsg),
@@ -51,7 +51,7 @@ func NewRoom(initialState GameState, events EventHandler) *Room {
 		SendMessage: make(chan SentMsg),
 		ResetState:  make(chan struct{}),
 		Term:        make(chan int),
-		events:      events,
+		worker:      tasks,
 		subscribers: make(map[Subscriber]Player),
 		state:       initialState,
 		IsPublic:    initialState.Settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
@@ -158,9 +158,9 @@ func (room *Room) onResetState() {
 	}
 	// broadcast the response to all subscribers - error or not
 	room.broadcast(resp)
-	// check to handle the shutdown event
+	// check to handle the shutdown task
 	if !room.state.HasMoreRounds() {
-		room.events.OnShutdown(room.state.CreateGameResult())
+		room.worker.DoShutdown(room.state.CreateGameResult())
 	}
 }
 
