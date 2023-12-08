@@ -90,18 +90,18 @@ func handleStartMessage(room *Room, player Player) ([]byte, error) {
 	if state.PlayerIsNotHost(player) {
 		return nil, errors.New("Player must be the host to start the game")
 	}
-	if state.Stage == Playing {
+	if state.stage == Playing {
 		return nil, errors.New("Cannot start a game that is already started")
 	}
 
 	state.StartGame()
 
-	room.StartResetTimer(state.Settings.TimeLimitSecs)
+	room.StartResetTimer(state.settings.TimeLimitSecs)
 	room.PostponeExpiration()
 
 	beginMsg := BeginMsg{
-		NextWord:        state.Turn.CurrWord,
-		NextPlayerIndex: state.Turn.CurrPlayerIndex,
+		NextWord:        state.turn.currWord,
+		NextPlayerIndex: state.turn.currPlayerIndex,
 	}
 	payload := OutputPayload{Code: StartCode, Msg: beginMsg}
 	return marshalPayload(payload)
@@ -140,7 +140,7 @@ type DrawMsg = Circle
 
 // color, radius, x, and y are unvalidated fields for performance
 func handleDrawMessage(state *GameState, msg DrawMsg, player Player) ([]byte, error) {
-	if state.Stage != Playing {
+	if state.stage != Playing {
 		return nil, errors.New("Can't draw on canvas when game is not being played")
 	}
 	if player.ID != state.GetCurrPlayer().ID {
@@ -165,7 +165,7 @@ func HandleJoin(state *GameState, player Player) ([]byte, error) {
 	}
 
 	// broadcast the new player to all subscribers
-	lastIndex := len(state.Players) - 1
+	lastIndex := len(state.players) - 1
 	playerMsg := PlayerMsg{
 		PlayerIndex: lastIndex,
 		Player:      player,
@@ -196,7 +196,7 @@ type FinishMsg struct {
 
 func HandleReset(room *Room) ([]byte, error) {
 	state := &room.state
-	log.Printf("Resetting the game for code %s", state.Code)
+	log.Printf("Resetting the game for code %s", state.code)
 
 	room.PostponeExpiration()
 
@@ -205,11 +205,11 @@ func HandleReset(room *Room) ([]byte, error) {
 	var beginMsg *BeginMsg = nil
 	if state.HasMoreRounds() {
 		state.StartGame()
-		room.StartResetTimer(state.Settings.TimeLimitSecs)
+		room.StartResetTimer(state.settings.TimeLimitSecs)
 
 		beginMsg = &BeginMsg{
-			NextWord:        state.Turn.CurrWord,
-			NextPlayerIndex: state.Turn.CurrPlayerIndex,
+			NextWord:        state.turn.currWord,
+			NextPlayerIndex: state.turn.currPlayerIndex,
 		}
 	} else {
 		state.FinishGame()

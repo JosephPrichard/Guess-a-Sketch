@@ -6,12 +6,13 @@ package game
 
 import (
 	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"log"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 )
@@ -24,22 +25,37 @@ const (
 
 // represents the entire state of the game at any given point in time
 type GameState struct {
-	Code       string              `json:"code"`       // code of the game that uniquely identifies it
-	CurrRound  int                 `json:"currRound"`  // the current round
-	Players    []Player            `json:"players"`    // stores all players in the order they joined in
-	ScoreBoard map[uuid.UUID]Score `json:"scoreBoard"` // maps player IDs to scores
-	ChatLog    []Chat              `json:"chatLog"`    // stores the chat log
-	Stage      int                 `json:"stage"`      // the current stage the room is
-	Settings   RoomSettings        `json:"settings"`   // settings for the room set before game starts
-	Turn       GameTurn            `json:"turn"`       // stores the current game turn
+	code       string              // code of the game that uniquely identifies it
+	currRound  int                 // the current round
+	players    []Player            // stores all players in the order they joined in
+	scoreBoard map[uuid.UUID]Score // maps player IDs to scores
+	chatLog    []Chat              // stores the chat log
+	stage      int                 // the current stage the room is
+	turn       GameTurn            // stores the current game turn
+	settings   RoomSettings        // settings for the room set before game starts
 }
 
 type GameTurn struct {
-	CurrWord        string             `json:"currWord"`        // current word to guess in session
-	CurrPlayerIndex int                `json:"currPlayerIndex"` // index of player drawing on canvas
-	Canvas          []Circle           `json:"canvas"`          // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
+	currWord        string             // current word to guess in session
+	currPlayerIndex int                // index of player drawing on canvas
+	canvas          []Circle           // canvas of circles, acts as a sparse matrix which can be used to construct a bitmap
 	guessers        map[uuid.UUID]bool // map storing each player ID who has guessed correctly this game
 	startTimeSecs   int64              // start time in milliseconds (unix epoch)
+}
+
+type StateJson struct {
+	CurrRound  int                 `json:"currRound"`
+	Players    []Player            `json:"players"`
+	ScoreBoard map[uuid.UUID]Score `json:"scoreBoard"`
+	ChatLog    []Chat              `json:"chatLog"`
+	Stage      int                 `json:"stage"`
+	Turn       TurnJson            `json:"turn"`
+}
+
+type TurnJson struct {
+	CurrWord   string  `json:"currWord"`
+	CurrPlayer *Player `json:"currPlayer"`
+	Canvas     []byte  `json:"canvas"`
 }
 
 type Circle struct {
@@ -53,14 +69,13 @@ type Circle struct {
 type Snapshot struct {
 	SavedBy   *Player
 	CreatedBy *Player
-	Canvas    string
+	Canvas    []byte
 }
 
 type Score struct {
 	Points   int `json:"points"`
 	Words    int
 	Drawings int
-	Win      bool
 }
 
 type Player struct {
@@ -76,45 +91,72 @@ type Chat struct {
 
 func NewGameState(code string, settings RoomSettings) GameState {
 	initialTurn := GameTurn{
-		Canvas:          make([]Circle, 0),
-		CurrPlayerIndex: -1,
+		canvas:          make([]Circle, 0),
+		currPlayerIndex: -1,
 		startTimeSecs:   time.Now().Unix(),
 		guessers:        make(map[uuid.UUID]bool),
 	}
 	return GameState{
-		Code:       code,
-		Players:    make([]Player, 0),
-		ScoreBoard: make(map[uuid.UUID]Score),
-		ChatLog:    make([]Chat, 0),
-		Settings:   settings,
-		Turn:       initialTurn,
+		code:       code,
+		players:    make([]Player, 0),
+		scoreBoard: make(map[uuid.UUID]Score),
+		chatLog:    make([]Chat, 0),
+		settings:   settings,
+		turn:       initialTurn,
 	}
 }
 
-func (state *GameState) GetCurrPlayer() *Player {
-	if state.Turn.CurrPlayerIndex < 0 {
-		return &Player{}
+func (state *GameState) EncodeCanvas() []byte {
+	var buf bytes.Buffer
+	err := binary.Write(&buf, binary.LittleEndian, state.turn.canvas)
+	if err != nil {
+		log.Println(err.Error())
+		return []byte{}
 	}
-	return &state.Players[state.Turn.CurrPlayerIndex]
+	return buf.Bytes()
 }
 
-func (state *GameState) PlayerIsNotHost(player Player) bool {
-	return len(state.Players) < 1 || state.Players[0] != player
-}
+func (state *GameState) MarshalJson() []byte {
+	currIdx := state.turn.currPlayerIndex
+	var curr *Player
+	if currIdx > 0 && currIdx < len(state.players) {
+		curr = &state.players[currIdx]
+	}
 
-func (state *GameState) ToMessage() []byte {
-	b, err := json.Marshal(state)
+	turnJson := TurnJson{
+		CurrWord:   state.turn.currWord,
+		CurrPlayer: curr,
+		Canvas:     state.EncodeCanvas(),
+	}
+	b, err := json.Marshal(StateJson{
+		CurrRound:  state.currRound,
+		Players:    state.players,
+		ScoreBoard: state.scoreBoard,
+		ChatLog:    state.chatLog,
+		Turn:       turnJson,
+	})
+
 	if err != nil {
 		log.Println(err.Error())
 		return []byte{}
 	}
 	return b
 }
+func (state *GameState) GetCurrPlayer() *Player {
+	if state.turn.currPlayerIndex < 0 {
+		return &Player{}
+	}
+	return &state.players[state.turn.currPlayerIndex]
+}
 
-func (state *GameState) PlayerIndex(playerToFind Player) int {
+func (state *GameState) PlayerIsNotHost(player Player) bool {
+	return len(state.players) < 1 || state.players[0] != player
+}
+
+func (state *GameState) playerIndex(playerToFind Player) int {
 	// find player in the slice
 	index := -1
-	for i, player := range state.Players {
+	for i, player := range state.players {
 		if player == playerToFind {
 			index = i
 			break
@@ -124,162 +166,150 @@ func (state *GameState) PlayerIndex(playerToFind Player) int {
 }
 
 func (state *GameState) Join(player Player) error {
-	_, exists := state.ScoreBoard[player.ID]
+	_, exists := state.scoreBoard[player.ID]
 	if exists {
 		return errors.New("Player cannot join a state they are already in")
 	}
-	if len(state.Players) >= state.Settings.PlayerLimit {
+	if len(state.players) >= state.settings.PlayerLimit {
 		return errors.New("Player cannot join, state is at player limit")
 	}
-	state.Players = append(state.Players, player)
-	state.ScoreBoard[player.ID] = Score{}
+	state.players = append(state.players, player)
+	state.scoreBoard[player.ID] = Score{}
 	return nil
 }
 
 func (state *GameState) Leave(playerToLeave Player) int {
-	index := state.PlayerIndex(playerToLeave)
+	index := state.playerIndex(playerToLeave)
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
 		return -1
 	}
 	// delete player from the slice by creating a new slice without the index
-	state.Players = append(state.Players[:index], state.Players[index+1:]...)
+	state.players = append(state.players[:index], state.players[index+1:]...)
 	return index
 }
 
 // starts the game and returns a snapshot of the settings used to start the game
 func (state *GameState) StartGame() {
-	state.Stage = Playing
-
-	state.ClearGuessers()
-	state.ClearCanvas()
-
+	state.stage = Playing
+	state.clearGuessers()
+	state.clearCanvas()
 	state.setNextWord()
 	state.cycleCurrPlayer()
-
-	state.ResetStartTime()
+	state.resetStartTime()
 }
 
-func (state *GameState) FinishGame() {
-	state.Stage = Post
+func (state *GameState) clearGuessers() {
+	for k := range state.turn.guessers {
+		delete(state.turn.guessers, k)
+	}
+}
+
+func (state *GameState) clearCanvas() {
+	state.turn.canvas = state.turn.canvas[0:0]
 }
 
 func (state *GameState) setNextWord() {
 	// pick a new word from the shared or custom word bank
 	bank := rand.Intn(2)
 	if bank == 0 {
-		index := rand.Intn(len(state.Settings.SharedWordBank))
-		state.Turn.CurrWord = state.Settings.SharedWordBank[index]
+		index := rand.Intn(len(state.settings.SharedWordBank))
+		state.turn.currWord = state.settings.SharedWordBank[index]
 	} else {
-		index := rand.Intn(len(state.Settings.CustomWordBank))
-		state.Turn.CurrWord = state.Settings.CustomWordBank[index]
+		index := rand.Intn(len(state.settings.CustomWordBank))
+		state.turn.currWord = state.settings.CustomWordBank[index]
 	}
 }
 
 func (state *GameState) cycleCurrPlayer() {
 	// go to the next player, circle back around when we reach the end
-	state.Turn.CurrPlayerIndex += 1
-	if state.Turn.CurrPlayerIndex >= len(state.Players) {
-		state.Turn.CurrPlayerIndex = 0
-		state.CurrRound += 1
+	turn := &state.turn
+	turn.currPlayerIndex += 1
+	if turn.currPlayerIndex >= len(state.players) {
+		turn.currPlayerIndex = 0
+		state.currRound += 1
 	}
 }
 
+func (state *GameState) FinishGame() {
+	state.stage = Post
+}
+
 // handlers a player's guess and returns the increase in the score of player due to the guess
-func (state *GameState) OnGuess(player Player, text string) int {
-	// nothing happens if a player guesses when game is not in session
-	if state.Stage != Playing {
+func (state *GameState) OnGuess(guesser Player, text string) int {
+	// nothing happens if a guesser guesses when game is not in session
+	if state.stage != Playing {
 		return 0
 	}
 	// current player cannot make a guess
-	if player.ID == state.GetCurrPlayer().ID {
+	if guesser.ID == state.GetCurrPlayer().ID {
 		return 0
 	}
 	// check whether the text is a correct guess or not, if not, do not increase the score
-	if !state.ContainsCurrWord(text) {
+	if !state.containsCurrWord(text) {
 		return 0
 	}
-	// cannot increase score of player if they already guessed
-	if state.Turn.guessers[player.ID] {
+	// cannot increase score of guesser if they already guessed
+	if state.turn.guessers[guesser.ID] {
 		return 0
 	}
 
 	// calculate the score increments for successful guess
-	timeSinceStartSecs := time.Now().Unix() - state.Turn.startTimeSecs
-	timeLimitSecs := state.Settings.TimeLimitSecs
-	pointsInc := (timeLimitSecs-int(timeSinceStartSecs))/timeLimitSecs*400 + 50
-	state.incScore(&player, Score{Points: pointsInc, Words: 1})
+	elapsed := time.Now().Unix() - state.turn.startTimeSecs
+	limit := state.settings.TimeLimitSecs
+	pointsInc := (limit-int(elapsed))/limit*400 + 50
+	state.incScore(&guesser, Score{Points: pointsInc, Words: 1})
 
-	state.SetGuesser(&player)
+	state.turn.guessers[guesser.ID] = true
 	return pointsInc
 }
 
-func (state *GameState) incScore(player *Player, s Score) {
-	score, _ := state.ScoreBoard[player.ID]
-	score.Points += s.Points
-	score.Words += s.Words
-	score.Drawings += s.Drawings
-	state.ScoreBoard[player.ID] = score
-}
-
-func (state *GameState) OnReset() int {
-	pointsInc := state.CalcResetScore()
-	state.incScore(state.GetCurrPlayer(), Score{Points: pointsInc, Drawings: 1})
-	return pointsInc
-}
-
-func (state *GameState) AddChat(chat Chat) {
-	state.ChatLog = append(state.ChatLog, chat)
-}
-
-func (state *GameState) HasMoreRounds() bool {
-	return state.CurrRound < state.Settings.TotalRounds
-}
-
-func (state *GameState) ClearGuessers() {
-	for k := range state.Turn.guessers {
-		delete(state.Turn.guessers, k)
-	}
-}
-
-func (state *GameState) ClearCanvas() {
-	state.Turn.Canvas = state.Turn.Canvas[0:0]
-}
-
-func (state *GameState) ResetStartTime() {
-	state.Turn.startTimeSecs = time.Now().Unix()
-}
-
-func (state *GameState) CalcResetScore() int {
-	return len(state.Turn.guessers) * 50
-}
-
-func (state *GameState) ContainsCurrWord(text string) bool {
+func (state *GameState) containsCurrWord(text string) bool {
 	for _, word := range strings.Split(text, " ") {
-		if word == state.Turn.CurrWord {
+		if strings.ToLower(word) == state.turn.currWord {
 			return true
 		}
 	}
 	return false
 }
 
-func (state *GameState) SetGuesser(player *Player) {
-	state.Turn.guessers[player.ID] = true
+func (state *GameState) incScore(player *Player, s Score) {
+	score, _ := state.scoreBoard[player.ID]
+	score.Points += s.Points
+	score.Words += s.Words
+	score.Drawings += s.Drawings
+	state.scoreBoard[player.ID] = score
+}
+
+func (state *GameState) OnReset() int {
+	pointsInc := state.calcResetScore()
+	state.incScore(state.GetCurrPlayer(), Score{Points: pointsInc, Drawings: 1})
+	return pointsInc
+}
+
+func (state *GameState) calcResetScore() int {
+	return len(state.turn.guessers) * 50
+}
+
+func (state *GameState) HasMoreRounds() bool {
+	return state.currRound < state.settings.TotalRounds
+}
+
+func (state *GameState) resetStartTime() {
+	state.turn.startTimeSecs = time.Now().Unix()
+}
+
+func (state *GameState) AddChat(chat Chat) {
+	state.chatLog = append(state.chatLog, chat)
 }
 
 func (state *GameState) Draw(stroke Circle) {
-	state.Turn.Canvas = append(state.Turn.Canvas, stroke)
+	state.turn.canvas = append(state.turn.canvas, stroke)
 }
 
 func (state *GameState) Capture() (Snapshot, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(state.Turn.Canvas)
-	if err != nil {
-		return Snapshot{}, errors.New("Failed to capture the drawing")
-	}
 	s := Snapshot{
-		Canvas:    buf.String(),
+		Canvas:    state.EncodeCanvas(),
 		CreatedBy: state.GetCurrPlayer(),
 	}
 	return s, nil
@@ -293,10 +323,14 @@ type GameResult struct {
 	DrawingsGuessed int
 }
 
-func (state *GameState) CreateGameResult() []GameResult {
-	var updates []GameResult
-	for id, score := range state.ScoreBoard {
-		updates = append(updates, GameResult{
+func compareResults(g1, g2 GameResult) bool {
+	return g1.Points > g2.Points
+}
+
+func (state *GameState) CreateGameResults() []GameResult {
+	var results []GameResult
+	for id, score := range state.scoreBoard {
+		results = append(results, GameResult{
 			PlayerID:        id,
 			Points:          score.Points,
 			WordsGuessed:    score.Words,
@@ -304,17 +338,12 @@ func (state *GameState) CreateGameResult() []GameResult {
 		})
 	}
 
-	var highestUpdate *GameResult
-	highestPoints := 0
-	for _, u := range updates {
-		if u.Points > highestPoints {
-			highestPoints = u.Points
-			highestUpdate = &u
-		}
-	}
-	if highestUpdate != nil {
-		highestUpdate.Win = true
+	sort.Slice(results, func(i, j int) bool {
+		return compareResults(results[i], results[j])
+	})
+	if len(results) > 0 {
+		results[0].Win = true
 	}
 
-	return updates
+	return results
 }

@@ -54,7 +54,7 @@ func NewRoom(initialState GameState, tasks RoomWorker) *Room {
 		worker:      tasks,
 		subscribers: make(map[Subscriber]Player),
 		state:       initialState,
-		IsPublic:    initialState.Settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
+		IsPublic:    initialState.settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
 	}
 	room.PostponeExpiration()
 	return room
@@ -109,7 +109,7 @@ func (room *Room) onSubscribe(subMsg SubscriberMsg) {
 	room.subscribers[subMsg.Subscriber] = subMsg.Player
 
 	room.broadcast(resp)
-	subMsg.Subscriber <- room.state.ToMessage()
+	subMsg.Subscriber <- room.state.MarshalJson()
 }
 
 func (room *Room) onUnsubscribe(subscriber Subscriber) {
@@ -160,7 +160,7 @@ func (room *Room) onResetState() {
 	room.broadcast(resp)
 	// check to handle the shutdown task
 	if !room.state.HasMoreRounds() {
-		room.worker.DoShutdown(room.state.CreateGameResult())
+		room.worker.DoShutdown(room.state.CreateGameResults())
 	}
 }
 

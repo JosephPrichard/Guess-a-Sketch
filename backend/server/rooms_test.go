@@ -55,7 +55,7 @@ func (worker MockWorker) DoShutdown(_ []game.GameResult) {
 func (worker MockWorker) DoCapture(_ game.Snapshot) {
 }
 
-func TestCreateRoom(t *testing.T) {
+func Test_CreateRoom(t *testing.T) {
 	roomsServer := NewRoomsServer(&MockRoomsStore{}, &MockAuthenticator{}, &MockWorker{}, []string{})
 
 	testSettings := game.DefaultSettings()
@@ -113,7 +113,7 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	return s, ws
 }
 
-func TestChatMsg(t *testing.T) {
+func Test_ChatMsg(t *testing.T) {
 	s, ws := BeforeTestJoinRoom(t)
 	defer s.Close()
 	defer ws.Close()
