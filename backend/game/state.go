@@ -92,7 +92,7 @@ type Chat struct {
 func NewGameState(code string, settings RoomSettings) GameState {
 	initialTurn := GameTurn{
 		canvas:          make([]Circle, 0),
-		currPlayerIndex: -1,
+		currPlayerIndex: 0,
 		startTimeSecs:   time.Now().Unix(),
 		guessers:        make(map[uuid.UUID]bool),
 	}
@@ -104,6 +104,10 @@ func NewGameState(code string, settings RoomSettings) GameState {
 		settings:   settings,
 		turn:       initialTurn,
 	}
+}
+
+func (state *GameState) Code() string {
+	return state.code
 }
 
 func (state *GameState) EncodeCanvas() []byte {
@@ -211,12 +215,13 @@ func (state *GameState) clearCanvas() {
 
 func (state *GameState) setNextWord() {
 	// pick a new word from the shared or custom word bank
-	bank := rand.Intn(2)
-	if bank == 0 {
-		index := rand.Intn(len(state.settings.SharedWordBank))
+	numSharedWords := len(state.settings.SharedWordBank)
+	numCustomWords := len(state.settings.CustomWordBank)
+	if numCustomWords < 1 || rand.Intn(2) == 0 {
+		index := rand.Intn(numSharedWords)
 		state.turn.currWord = state.settings.SharedWordBank[index]
 	} else {
-		index := rand.Intn(len(state.settings.CustomWordBank))
+		index := rand.Intn(numCustomWords)
 		state.turn.currWord = state.settings.CustomWordBank[index]
 	}
 }
@@ -229,6 +234,10 @@ func (state *GameState) cycleCurrPlayer() {
 		turn.currPlayerIndex = 0
 		state.currRound += 1
 	}
+}
+
+func (state *GameState) resetStartTime() {
+	state.turn.startTimeSecs = time.Now().Unix()
 }
 
 func (state *GameState) FinishGame() {
@@ -302,10 +311,6 @@ func (state *GameState) calcResetScore() int {
 
 func (state *GameState) HasMoreRounds() bool {
 	return state.currRound < state.settings.TotalRounds
-}
-
-func (state *GameState) resetStartTime() {
-	state.turn.startTimeSecs = time.Now().Unix()
 }
 
 func (state *GameState) Draw(stroke Circle) {

@@ -29,9 +29,9 @@ const (
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
 var ErrMarshal = errors.New("Failed to marshal output data")
 
-type InputPayload struct {
-	Code int             `json:"code"`
-	Msg  json.RawMessage `json:"msg"`
+type InputPayload[T any] struct {
+	Code int `json:"code"`
+	Msg  T   `json:"msg"`
 }
 
 type OutputPayload[T any] struct {
@@ -41,7 +41,7 @@ type OutputPayload[T any] struct {
 
 func (room *GameRoom) HandleMessage(message []byte, player Player) ([]byte, error) {
 	// deserialize payload message from json
-	var payload InputPayload
+	var payload InputPayload[json.RawMessage]
 	err := json.Unmarshal(message, &payload)
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (room *GameRoom) handleStartMessage(player Player) ([]byte, error) {
 	room.postponeExpiration()
 
 	msg := BeginMsg{NextWord: state.turn.currWord, NextPlayerIndex: state.turn.currPlayerIndex}
-	return createPayload(StartCode, msg)
+	return createResponse(BeginCode, msg)
 }
 
 type TextMsg struct {
@@ -112,7 +112,7 @@ func (room *GameRoom) handleTextMessage(msg TextMsg, player Player) ([]byte, err
 	chat := room.state.TryGuess(player, text)
 	log.Printf("Chat message, %+v: %s", player, msg.Text)
 
-	return createPayload(ChatCode, chat)
+	return createResponse(ChatCode, chat)
 }
 
 type DrawMsg = Circle
@@ -129,7 +129,7 @@ func (room *GameRoom) handleDrawMessage(msg DrawMsg, player Player) ([]byte, err
 	}
 
 	state.Draw(msg)
-	return createPayload(DrawCode, msg)
+	return createResponse(DrawCode, msg)
 }
 
 type PlayerMsg struct {
@@ -147,7 +147,7 @@ func (room *GameRoom) HandleJoin(player Player) ([]byte, error) {
 
 	lastIndex := len(state.players) - 1
 	msg := PlayerMsg{PlayerIndex: lastIndex, Player: player}
-	return createPayload(JoinCode, msg)
+	return createResponse(JoinCode, msg)
 }
 
 func HandleLeave(state *GameState, player Player) ([]byte, error) {
@@ -157,7 +157,7 @@ func HandleLeave(state *GameState, player Player) ([]byte, error) {
 	}
 
 	msg := PlayerMsg{PlayerIndex: leaveIndex, Player: player}
-	return createPayload(LeaveCode, msg)
+	return createResponse(LeaveCode, msg)
 }
 
 type FinishMsg struct {
@@ -184,10 +184,10 @@ func (room *GameRoom) HandleReset() ([]byte, error) {
 	}
 
 	msg := FinishMsg{BeginMsg: beginMsg, DrawScoreInc: pointsInc}
-	return createPayload(FinishCode, msg)
+	return createResponse(FinishCode, msg)
 }
 
-func createPayload[T any](code int, msg T) ([]byte, error) {
+func createResponse[T any](code int, msg T) ([]byte, error) {
 	payload := OutputPayload[T]{Code: code, Msg: msg}
 	b, err := json.Marshal(payload)
 	if err != nil {

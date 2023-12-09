@@ -12,8 +12,15 @@ import (
 	"testing"
 )
 
+func MockSettings() RoomSettings {
+	var settings RoomSettings
+	SettingsWithDefaults(&settings)
+	settings.SharedWordBank = []string{"Word1", "Word2"}
+	return settings
+}
+
 func TestState_Join(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	player1 := Player{ID: uuid.New()}
 	player2 := Player{ID: uuid.New()}
@@ -39,7 +46,7 @@ func TestState_Join(t *testing.T) {
 }
 
 func TestState_Join_Duplicate(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	player1 := Player{ID: uuid.New()}
 	player2 := Player{ID: player1.ID}
@@ -55,7 +62,7 @@ func TestState_Join_Duplicate(t *testing.T) {
 }
 
 func TestState_Leave(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	player1 := Player{ID: uuid.New()}
 	player2 := Player{ID: uuid.New()}
@@ -72,7 +79,7 @@ func TestState_Leave(t *testing.T) {
 }
 
 func TestState_Leave_NotJoined(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	player1 := Player{ID: uuid.New()}
 	state.players = []Player{player1}
@@ -83,8 +90,28 @@ func TestState_Leave_NotJoined(t *testing.T) {
 	}
 }
 
+func TestState_StartGame(t *testing.T) {
+	settings := MockSettings()
+	state := NewGameState("123", settings)
+
+	player := Player{ID: uuid.New()}
+	_ = state.Join(player)
+
+	state.StartGame()
+
+	if state.stage != Playing {
+		t.Fatalf("Failed to set the state stage to Playing")
+	}
+	if state.currRound != 1 {
+		t.Fatalf("Failed to advance the round")
+	}
+	if state.turn.currWord == "" {
+		t.Fatalf("Failed pick a new random current word")
+	}
+}
+
 func TestState_TryGuess(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	state.stage = Playing
 	state.turn.currWord = "quick"
@@ -108,7 +135,7 @@ func TestState_TryGuess(t *testing.T) {
 }
 
 func TestState_TryGuess_WrongWord(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	state.stage = Playing
 	state.turn.currWord = "fast"
@@ -121,7 +148,7 @@ func TestState_TryGuess_WrongWord(t *testing.T) {
 }
 
 func TestState_TryGuess_IsCurrPlayer(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	state.stage = Playing
 	state.turn.currWord = "quick"
@@ -135,7 +162,7 @@ func TestState_TryGuess_IsCurrPlayer(t *testing.T) {
 }
 
 func TestState_TryGuess_NoDoubleGuess(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	state.stage = Playing
 	state.turn.currWord = "quick"
@@ -150,7 +177,7 @@ func TestState_TryGuess_NoDoubleGuess(t *testing.T) {
 }
 
 func TestState_CreateGameResult(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 
 	state.scoreBoard = map[uuid.UUID]Score{
 		uuid.New(): {Points: 100, Words: 1, Drawings: 2},
@@ -169,7 +196,7 @@ func TestState_CreateGameResult(t *testing.T) {
 }
 
 func TestState_EncodeCanvas(t *testing.T) {
-	state := NewGameState("123", DefaultSettings())
+	state := NewGameState("123", MockSettings())
 	state.turn.canvas = []Circle{{X: 1, Y: 1}, {X: 1, Y: 1}}
 
 	b := state.EncodeCanvas()

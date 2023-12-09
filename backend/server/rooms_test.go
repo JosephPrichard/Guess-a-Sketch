@@ -6,7 +6,6 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"guessasketch/game"
 	"net/http"
@@ -43,13 +42,9 @@ type StubAuthenticator struct {
 	testPlayer game.Player
 }
 
-func (stub *StubAuthenticator) GetSession(_ string) (*JwtSession, error) {
-	return nil, nil
-}
+func (stub StubAuthenticator) GetSession(_ string) (*JwtSession, error) { return nil, nil }
 
-func (stub *StubAuthenticator) GetPlayer(_ string) game.Player {
-	return stub.testPlayer
-}
+func (stub StubAuthenticator) GetPlayer(_ string) game.Player { return stub.testPlayer }
 
 // no-op implementation of worker - we don't care about testing this
 type FakeWorker struct{}
@@ -58,17 +53,16 @@ func (fake FakeWorker) DoShutdown(_ []game.GameResult) {}
 
 func (fake FakeWorker) DoCapture(_ game.Snapshot) {}
 
+// e2e tests for the websocket server
 func TestRoomsServer_CreateRoom(t *testing.T) {
-
 	roomsServer := NewRoomsServer(&StubRoomsStore{}, &StubAuthenticator{}, &FakeWorker{}, []string{})
 
-	testSettings := game.DefaultSettings()
+	testSettings := game.RoomSettings{}
 
 	b, err := json.Marshal(testSettings)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	t.Logf("Testing create room with body %s", string(b))
 	body := strings.NewReader(string(b))
 
 	r := httptest.NewRequest("", "/", body)
@@ -83,20 +77,17 @@ func TestRoomsServer_CreateRoom(t *testing.T) {
 	}
 }
 
-func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn, game.Player) {
-	testCode := "123abc"
-	initialState := game.NewGameState(testCode, game.DefaultSettings())
-
+func beforeTestJoinRoom(t *testing.T, initialState game.GameState) (*httptest.Server, *websocket.Conn, game.Player) {
 	testRoom := game.NewGameRoom(initialState, &FakeWorker{})
 	mockRooms := StubRoomsStore{}
 	go testRoom.Start()
-	mockRooms.Store(testCode, testRoom)
+	mockRooms.Store(initialState.Code(), testRoom)
 
 	player := GuestUser()
 	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{testPlayer: player}, &FakeWorker{}, []string{})
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 
-	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + testCode
+	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + initialState.Code()
 
 	ws, _, err := websocket.DefaultDialer.Dial(u, nil)
 	if err != nil {
@@ -116,14 +107,13 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn, game.P
 	return s, ws, player
 }
 
-func TestRoomsServer_ChatMsg(t *testing.T) {
-	s, ws, player := BeforeTestJoinRoom(t)
-	defer s.Close()
-	defer ws.Close()
+// runs a test for a message with a particular input and expected output against the websocket connection
+func runTestMessage[I any, O any](t *testing.T, ws *websocket.Conn,
+	input game.InputPayload[I], expected game.OutputPayload[O]) {
 
-	msg := fmt.Sprintf(`{"code": %d, "msg": {"text": "Hello 123 Hello123"}}`, game.TextCode)
+	b, _ := json.Marshal(input)
 
-	if err := ws.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+	if err := ws.WriteMessage(websocket.TextMessage, b); err != nil {
 		t.Fatalf("%v", err)
 	}
 	_, p, err := ws.ReadMessage()
@@ -131,17 +121,80 @@ func TestRoomsServer_ChatMsg(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 
-	var payload game.OutputPayload[game.Chat]
-	_ = json.Unmarshal(p, &payload)
+	var payload game.OutputPayload[O]
+	err = json.Unmarshal(p, &payload)
+	if err != nil {
+		t.Fatalf("Failed to unmarhsall output payload, didn't receieve the expected type")
+	}
 
-	expected := game.OutputPayload[game.Chat]{
+	if !reflect.DeepEqual(payload, expected) {
+		t.Fatalf("Output %+v didn't match expected value %+v", payload, expected)
+	}
+}
+
+func MockSettings(word string) game.RoomSettings {
+	var settings game.RoomSettings
+	game.SettingsWithDefaults(&settings)
+	settings.SharedWordBank = []string{word}
+	return settings
+}
+
+func TestRoomsServer_ChatMessage(t *testing.T) {
+	initialState := game.NewGameState("123abc", MockSettings("Word"))
+	s, ws, player := beforeTestJoinRoom(t, initialState)
+	defer s.Close()
+	defer ws.Close()
+
+	input := game.InputPayload[game.TextMsg]{
+		Code: game.TextCode,
+		Msg:  game.TextMsg{Text: "Hello 123"},
+	}
+	expOutput := game.OutputPayload[game.Chat]{
 		Code: game.ChatCode,
-		Msg: game.Chat{
-			Player: player,
-			Text:   "Hello 123 Hello123",
+		Msg:  game.Chat{Player: player, Text: "Hello 123"},
+	}
+
+	runTestMessage(t, ws, input, expOutput)
+}
+
+func TestRoomServer_StartMessage(t *testing.T) {
+	word := "Word"
+	initialState := game.NewGameState("123abc", MockSettings(word))
+
+	s, ws, _ := beforeTestJoinRoom(t, initialState)
+	defer s.Close()
+	defer ws.Close()
+
+	input := game.InputPayload[struct{}]{
+		Code: game.StartCode,
+	}
+	expOutput := game.OutputPayload[game.BeginMsg]{
+		Code: game.BeginCode,
+		Msg: game.BeginMsg{
+			NextWord:        word,
+			NextPlayerIndex: 0,
 		},
 	}
-	if !reflect.DeepEqual(payload, expected) {
-		t.Fatalf("Payload %+v didn't match expected value %+v", payload, expected)
+
+	runTestMessage(t, ws, input, expOutput)
+}
+
+func TestRoomsServer_DrawMessage(t *testing.T) {
+	initialState := game.NewGameState("123abc", MockSettings("Word"))
+	initialState.StartGame()
+
+	s, ws, _ := beforeTestJoinRoom(t, initialState)
+	defer s.Close()
+	defer ws.Close()
+
+	input := game.InputPayload[game.DrawMsg]{
+		Code: game.DrawCode,
+		Msg:  game.DrawMsg{X: 34, Y: 47},
 	}
+	expOutput := game.OutputPayload[game.DrawMsg]{
+		Code: game.DrawCode,
+		Msg:  game.DrawMsg{X: 34, Y: 47},
+	}
+
+	runTestMessage(t, ws, input, expOutput)
 }
