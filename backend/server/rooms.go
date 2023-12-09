@@ -113,16 +113,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	code := query.Get("code")
 	token := query.Get("token")
 
-	var player User
-	if token != "" {
-		// if a session token is specified, attempt to get the id for the user
-		session, err := server.authenticator.GetSession(token)
-		if err != nil && session != nil {
-			player = session.user
-		}
-	} else {
-		player = GuestUser()
-	}
+	player := server.authenticator.GetPlayer(token)
 
 	room := server.rooms.Load(code)
 	if room == nil {

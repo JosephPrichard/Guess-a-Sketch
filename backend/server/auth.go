@@ -19,6 +19,7 @@ import (
 
 type Authenticator interface {
 	GetSession(token string) (*JwtSession, error)
+	GetPlayer(token string) game.Player
 }
 
 type AuthServer struct {
@@ -59,6 +60,18 @@ func (server *AuthServer) GetSession(token string) (*JwtSession, error) {
 	}
 
 	return &session, nil
+}
+
+func (server *AuthServer) GetPlayer(token string) game.Player {
+	player := GuestUser()
+	if token != "" {
+		// if a session token is specified, attempt to get the id for the user
+		session, err := server.GetSession(token)
+		if err != nil && session != nil {
+			player = session.user
+		}
+	}
+	return player
 }
 
 type TokenResp struct {

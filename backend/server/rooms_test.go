@@ -11,6 +11,7 @@ import (
 	"guessasketch/game"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -33,25 +34,32 @@ func (stub *StubRoomsStore) Store(code string, room game.Room) {
 	stub.room = room
 }
 
-func (stub *StubRoomsStore) Codes(offset int, limit int) []string {
+func (stub *StubRoomsStore) Codes(_ int, _ int) []string {
 	return []string{stub.code}
 }
 
-// stub implementation of an authenticator where any user is not authenticated
-type StubAuthenticator struct{}
+// stub implementation of an authenticator where we can provide the authenticated test player
+type StubAuthenticator struct {
+	testPlayer game.Player
+}
 
-func (stub *StubAuthenticator) GetSession(token string) (*JwtSession, error) {
+func (stub *StubAuthenticator) GetSession(_ string) (*JwtSession, error) {
 	return nil, nil
+}
+
+func (stub *StubAuthenticator) GetPlayer(_ string) game.Player {
+	return stub.testPlayer
 }
 
 // no-op implementation of worker - we don't care about testing this
 type FakeWorker struct{}
 
-func (fake FakeWorker) DoShutdown(results []game.GameResult) {}
+func (fake FakeWorker) DoShutdown(_ []game.GameResult) {}
 
-func (fake FakeWorker) DoCapture(snap game.Snapshot) {}
+func (fake FakeWorker) DoCapture(_ game.Snapshot) {}
 
 func TestRoomsServer_CreateRoom(t *testing.T) {
+
 	roomsServer := NewRoomsServer(&StubRoomsStore{}, &StubAuthenticator{}, &FakeWorker{}, []string{})
 
 	testSettings := game.DefaultSettings()
@@ -75,7 +83,7 @@ func TestRoomsServer_CreateRoom(t *testing.T) {
 	}
 }
 
-func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
+func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn, game.Player) {
 	testCode := "123abc"
 	initialState := game.NewGameState(testCode, game.DefaultSettings())
 
@@ -84,7 +92,8 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	go testRoom.Start()
 	mockRooms.Store(testCode, testRoom)
 
-	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{}, &FakeWorker{}, []string{})
+	player := GuestUser()
+	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{testPlayer: player}, &FakeWorker{}, []string{})
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 
 	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + testCode
@@ -95,22 +104,20 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	}
 
 	// check the first two messages end when joining first
-	_, p, err := ws.ReadMessage()
+	_, _, err = ws.ReadMessage()
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	t.Log(string(p))
-	_, p, err = ws.ReadMessage()
+	_, _, err = ws.ReadMessage()
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	t.Log(string(p))
 
-	return s, ws
+	return s, ws, player
 }
 
 func TestRoomsServer_ChatMsg(t *testing.T) {
-	s, ws := BeforeTestJoinRoom(t)
+	s, ws, player := BeforeTestJoinRoom(t)
 	defer s.Close()
 	defer ws.Close()
 
@@ -124,7 +131,17 @@ func TestRoomsServer_ChatMsg(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 
-	var payload game.OutputPayload
+	var payload game.OutputPayload[game.Chat]
 	_ = json.Unmarshal(p, &payload)
-	t.Log(string(p))
+
+	expected := game.OutputPayload[game.Chat]{
+		Code: game.ChatCode,
+		Msg: game.Chat{
+			Player: player,
+			Text:   "Hello 123 Hello123",
+		},
+	}
+	if !reflect.DeepEqual(payload, expected) {
+		t.Fatalf("Payload %+v didn't match expected value %+v", payload, expected)
+	}
 }

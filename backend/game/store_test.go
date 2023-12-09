@@ -18,17 +18,17 @@ type StubRoom struct {
 
 func (stub *StubRoom) Start() {}
 
-func (stub *StubRoom) Join(m SubscriberMsg) {}
+func (stub *StubRoom) Join(_ SubscriberMsg) {}
 
-func (stub *StubRoom) Leave(s Subscriber) {}
+func (stub *StubRoom) Leave(_ Subscriber) {}
 
-func (stub *StubRoom) SendMessage(m SentMsg) {}
+func (stub *StubRoom) SendMessage(_ SentMsg) {}
 
 func (stub *StubRoom) Stop(code int) {
 	stub.stopCode = code
 }
 
-func (stub *StubRoom) IsExpired(now time.Time) bool {
+func (stub *StubRoom) IsExpired(_ time.Time) bool {
 	return stub.isExpired
 }
 
@@ -66,8 +66,6 @@ func TestRoomsMap_StoreThenLoad(t *testing.T) {
 func TestRoomsMap_StoreThenCodes(t *testing.T) {
 	var testStore = []string{"123", "123", "456", "789"}
 
-	rooms := NewRoomsMap(time.Second)
-
 	type TestCodes struct {
 		offset   int
 		limit    int
@@ -78,6 +76,8 @@ func TestRoomsMap_StoreThenCodes(t *testing.T) {
 		{offset: 2, limit: 10, expCodes: []string{"456", "789"}},
 		{offset: 0, limit: 2, expCodes: []string{"123", "123"}},
 	}
+
+	rooms := NewRoomsMap(time.Second)
 
 	for _, test := range testStore {
 		rooms.Store(test, &StubRoom{code: test})

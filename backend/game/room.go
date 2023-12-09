@@ -219,7 +219,7 @@ func (room *GameRoom) onResetState() {
 }
 
 func (room *GameRoom) onTerminate(code int) {
-	payload := OutputPayload{Code: code}
+	payload := OutputPayload[struct{}]{Code: code}
 	resp, err := json.Marshal(payload)
 	if err != nil {
 		err = ErrMarshal
