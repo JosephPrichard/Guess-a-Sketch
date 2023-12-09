@@ -15,48 +15,44 @@ import (
 	"testing"
 )
 
-// mock implementation of a rooms store that only stores a single room
-type MockRoomsStore struct {
+// stub implementation of a rooms store that only stores a single room
+type StubRoomsStore struct {
 	code string
-	room *game.Room
+	room game.Room
 }
 
-func (store *MockRoomsStore) Load(code string) *game.Room {
-	if store.code == code {
-		return store.room
+func (stub *StubRoomsStore) Load(code string) game.Room {
+	if stub.code == code {
+		return stub.room
 	}
 	return nil
 }
 
-func (store *MockRoomsStore) Store(code string, room *game.Room) {
-	store.code = code
-	store.room = room
+func (stub *StubRoomsStore) Store(code string, room game.Room) {
+	stub.code = code
+	stub.room = room
 }
 
-func (store *MockRoomsStore) Codes(_ int, _ int) []string {
-	return []string{store.code}
+func (stub *StubRoomsStore) Codes(offset int, limit int) []string {
+	return []string{stub.code}
 }
 
-// mock implementation of an authenticator where any user is not authenticated
-type MockAuthenticator struct {
-}
+// stub implementation of an authenticator where any user is not authenticated
+type StubAuthenticator struct{}
 
-func (auth *MockAuthenticator) GetSession(_ string) (*JwtSession, error) {
+func (stub *StubAuthenticator) GetSession(token string) (*JwtSession, error) {
 	return nil, nil
 }
 
-// mock implementation of worker that does nothing - we don't care about testing this
-type MockWorker struct {
-}
+// no-op implementation of worker - we don't care about testing this
+type FakeWorker struct{}
 
-func (worker MockWorker) DoShutdown(_ []game.GameResult) {
-}
+func (fake FakeWorker) DoShutdown(results []game.GameResult) {}
 
-func (worker MockWorker) DoCapture(_ game.Snapshot) {
-}
+func (fake FakeWorker) DoCapture(snap game.Snapshot) {}
 
-func Test_CreateRoom(t *testing.T) {
-	roomsServer := NewRoomsServer(&MockRoomsStore{}, &MockAuthenticator{}, &MockWorker{}, []string{})
+func TestRoomsServer_CreateRoom(t *testing.T) {
+	roomsServer := NewRoomsServer(&StubRoomsStore{}, &StubAuthenticator{}, &FakeWorker{}, []string{})
 
 	testSettings := game.DefaultSettings()
 
@@ -83,12 +79,12 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	testCode := "123abc"
 	initialState := game.NewGameState(testCode, game.DefaultSettings())
 
-	testRoom := game.NewRoom(initialState, &MockWorker{})
-	mockRooms := MockRoomsStore{}
+	testRoom := game.NewGameRoom(initialState, &FakeWorker{})
+	mockRooms := StubRoomsStore{}
 	go testRoom.Start()
 	mockRooms.Store(testCode, testRoom)
 
-	roomsServer := NewRoomsServer(&mockRooms, &MockAuthenticator{}, &MockWorker{}, []string{})
+	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{}, &FakeWorker{}, []string{})
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 
 	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + testCode
@@ -113,7 +109,7 @@ func BeforeTestJoinRoom(t *testing.T) (*httptest.Server, *websocket.Conn) {
 	return s, ws
 }
 
-func Test_ChatMsg(t *testing.T) {
+func TestRoomsServer_ChatMsg(t *testing.T) {
 	s, ws := BeforeTestJoinRoom(t)
 	defer s.Close()
 	defer ws.Close()
@@ -127,5 +123,8 @@ func Test_ChatMsg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
+
+	var payload game.OutputPayload
+	_ = json.Unmarshal(p, &payload)
 	t.Log(string(p))
 }

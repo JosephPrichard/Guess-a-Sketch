@@ -235,21 +235,30 @@ func (state *GameState) FinishGame() {
 	state.stage = Post
 }
 
+func (state *GameState) TryGuess(player Player, text string) Chat {
+	pointsInc := state.guess(player, text)
+
+	chat := Chat{Player: player, GuessPointsInc: pointsInc}
+	if pointsInc == 0 {
+		// only set the text for a failed guess (so we cannot tell what guess is from the log or responses)
+		chat.Text = text
+	}
+
+	state.chatLog = append(state.chatLog, chat)
+	return chat
+}
+
 // handlers a player's guess and returns the increase in the score of player due to the guess
-func (state *GameState) OnGuess(guesser Player, text string) int {
-	// nothing happens if a guesser guesses when game is not in session
+func (state *GameState) guess(guesser Player, text string) int {
 	if state.stage != Playing {
 		return 0
 	}
-	// current player cannot make a guess
 	if guesser.ID == state.GetCurrPlayer().ID {
 		return 0
 	}
-	// check whether the text is a correct guess or not, if not, do not increase the score
 	if !state.containsCurrWord(text) {
 		return 0
 	}
-	// cannot increase score of guesser if they already guessed
 	if state.turn.guessers[guesser.ID] {
 		return 0
 	}
@@ -299,20 +308,16 @@ func (state *GameState) resetStartTime() {
 	state.turn.startTimeSecs = time.Now().Unix()
 }
 
-func (state *GameState) AddChat(chat Chat) {
-	state.chatLog = append(state.chatLog, chat)
-}
-
 func (state *GameState) Draw(stroke Circle) {
 	state.turn.canvas = append(state.turn.canvas, stroke)
 }
 
-func (state *GameState) Capture() (Snapshot, error) {
-	s := Snapshot{
+func (state *GameState) Capture(player Player) Snapshot {
+	return Snapshot{
 		Canvas:    state.EncodeCanvas(),
 		CreatedBy: state.GetCurrPlayer(),
+		SavedBy:   &player,
 	}
-	return s, nil
 }
 
 type GameResult struct {

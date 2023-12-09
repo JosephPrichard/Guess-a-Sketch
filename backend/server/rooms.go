@@ -75,7 +75,7 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	// generate a code, create a room, start it, then store it in the map
 	code, err := HexCode(8)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to generate a valid error code")
+		WriteError(w, http.StatusInternalServerError, "Failed to generate a valid room code")
 		return
 	}
 
@@ -96,7 +96,7 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	initialState := game.NewGameState(code, settings)
-	room := game.NewRoom(initialState, server.worker)
+	room := game.NewGameRoom(initialState, server.worker)
 	log.Printf("Starting a room for code %s", code)
 	go room.Start()
 	server.rooms.Store(code, room)
@@ -138,7 +138,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 
 	// create a new subscription channel and join the room with it
 	subscriber := make(game.Subscriber)
-	room.Subscribe <- game.SubscriberMsg{Subscriber: subscriber, Player: player}
+	room.Join(game.SubscriberMsg{Subscriber: subscriber, Player: player})
 
 	log.Printf("Joined room %s with name %s and id %s", code, player.Name, player.ID)
 
@@ -147,10 +147,10 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 // reads messages from socket and sends them to room
-func socketListener(ws *websocket.Conn, room *game.Room, subscriber game.Subscriber) {
+func socketListener(ws *websocket.Conn, room game.Room, subscriber game.Subscriber) {
 	defer func() {
 		// unsubscribes from the room when the websocket is closed
-		room.Unsubscribe <- subscriber
+		room.Leave(subscriber)
 		_ = ws.Close()
 		log.Printf("Socket listener close function called")
 		if panicInfo := recover(); panicInfo != nil {
@@ -165,7 +165,7 @@ func socketListener(ws *websocket.Conn, room *game.Room, subscriber game.Subscri
 		}
 		// read any message from the socket and broadcast it to the room
 		log.Println("Receiving message", string(p))
-		room.SendMessage <- game.SentMsg{Message: p, Sender: subscriber}
+		room.SendMessage(game.SentMsg{Message: p, Sender: subscriber})
 	}
 }
 
@@ -198,12 +198,12 @@ func NewRoomServer(db *sqlx.DB) *RoomServer {
 	return &RoomServer{db}
 }
 
-func (server *RoomServer) DoShutdown(results []game.GameResult) {
+func (server RoomServer) DoShutdown(results []game.GameResult) {
 	// perform the batch update stats on a separate goroutine
 	go database.UpdateStats(server.db, results)
 }
 
-func (server *RoomServer) DoCapture(drawing game.Snapshot) {
+func (server RoomServer) DoCapture(drawing game.Snapshot) {
 	// perform a capture operation on a separate goroutine
 	go database.SaveDrawing(server.db, drawing)
 }

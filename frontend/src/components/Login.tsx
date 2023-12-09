@@ -23,7 +23,8 @@ const Login = () => {
     });
 
     return (
-        <div id="sign-in2" class="g-signin2 Login"/>
+        // <div id="sign-in2" class="g-signin2 Login"/>
+        <div></div>
     );
 }
 

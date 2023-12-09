@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func Test_Join(t *testing.T) {
+func TestState_Join(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	player1 := Player{ID: uuid.New()}
@@ -38,7 +38,7 @@ func Test_Join(t *testing.T) {
 	}
 }
 
-func Test_Join_Duplicate(t *testing.T) {
+func TestState_Join_Duplicate(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	player1 := Player{ID: uuid.New()}
@@ -54,7 +54,7 @@ func Test_Join_Duplicate(t *testing.T) {
 	}
 }
 
-func Test_Leave(t *testing.T) {
+func TestState_Leave(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	player1 := Player{ID: uuid.New()}
@@ -71,7 +71,7 @@ func Test_Leave(t *testing.T) {
 	}
 }
 
-func Test_Leave_NotJoined(t *testing.T) {
+func TestState_Leave_NotJoined(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	player1 := Player{ID: uuid.New()}
@@ -83,7 +83,7 @@ func Test_Leave_NotJoined(t *testing.T) {
 	}
 }
 
-func Test_OnGuess(t *testing.T) {
+func TestState_TryGuess(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	state.stage = Playing
@@ -92,7 +92,7 @@ func Test_OnGuess(t *testing.T) {
 	state.players = []Player{{ID: uuid.New()}, guesser}
 	state.turn.currPlayerIndex = 0
 
-	if state.OnGuess(guesser, "the QUICK brown fox") <= 0 {
+	if state.TryGuess(guesser, "the QUICK brown fox").GuessPointsInc <= 0 {
 		t.Fatalf("Guess score increment to be at least 0")
 	}
 
@@ -107,7 +107,7 @@ func Test_OnGuess(t *testing.T) {
 	}
 }
 
-func Test_OnGuess_WrongWord(t *testing.T) {
+func TestState_TryGuess_WrongWord(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	state.stage = Playing
@@ -115,12 +115,12 @@ func Test_OnGuess_WrongWord(t *testing.T) {
 	state.players = []Player{{ID: uuid.New()}}
 	state.turn.currPlayerIndex = 0
 
-	if state.OnGuess(Player{ID: uuid.New()}, "the quick brown fox") != 0 {
+	if state.TryGuess(Player{ID: uuid.New()}, "the quick brown fox").GuessPointsInc != 0 {
 		t.Fatalf("Guess should be unsuccessful due to wrong word")
 	}
 }
 
-func Test_OnGuess_IsCurrPlayer(t *testing.T) {
+func TestState_TryGuess_IsCurrPlayer(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	state.stage = Playing
@@ -129,12 +129,12 @@ func Test_OnGuess_IsCurrPlayer(t *testing.T) {
 	state.players = []Player{player1}
 	state.turn.currPlayerIndex = 0
 
-	if state.OnGuess(player1, "the quick brown fox") != 0 {
+	if state.TryGuess(player1, "the quick brown fox").GuessPointsInc != 0 {
 		t.Fatalf("Guess should be unsuccessful due guesser is current player")
 	}
 }
 
-func Test_OnGuess_NoDoubleGuess(t *testing.T) {
+func TestState_TryGuess_NoDoubleGuess(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	state.stage = Playing
@@ -143,13 +143,13 @@ func Test_OnGuess_NoDoubleGuess(t *testing.T) {
 	state.turn.currPlayerIndex = 0
 
 	player := Player{ID: uuid.New()}
-	_ = state.OnGuess(player, "the quick brown fox")
-	if state.OnGuess(player, "the quick brown fox") != 0 {
+	_ = state.TryGuess(player, "the quick brown fox")
+	if state.TryGuess(player, "the quick brown fox").GuessPointsInc != 0 {
 		t.Fatalf("Guess should be unsuccessful due to duplcate guess")
 	}
 }
 
-func Test_CreateGameResult(t *testing.T) {
+func TestState_CreateGameResult(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 
 	state.scoreBoard = map[uuid.UUID]Score{
@@ -168,7 +168,7 @@ func Test_CreateGameResult(t *testing.T) {
 	}
 }
 
-func TestGameState_EncodeCanvas(t *testing.T) {
+func TestState_EncodeCanvas(t *testing.T) {
 	state := NewGameState("123", DefaultSettings())
 	state.turn.canvas = []Circle{{X: 1, Y: 1}, {X: 1, Y: 1}}
 
