@@ -22,8 +22,8 @@ func MockSettings() RoomSettings {
 func TestState_Join(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 
-	player1 := Player{ID: uuid.New()}
-	player2 := Player{ID: uuid.New()}
+	player1 := Player{ID: uuid.New(), present: true}
+	player2 := Player{ID: uuid.New(), present: true}
 
 	err := state.Join(player1)
 	if err != nil {
@@ -41,31 +41,36 @@ func TestState_Join(t *testing.T) {
 
 	expectedPlayers := []Player{player1, player2}
 	if !reflect.DeepEqual(expectedPlayers, state.players) {
-		t.Fatalf("players slice didn't contaion expected expectedPlayers")
+		t.Fatalf("players slice didn't contain expected players")
 	}
 }
 
 func TestState_Join_Duplicate(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 
-	player1 := Player{ID: uuid.New()}
-	player2 := Player{ID: player1.ID}
+	player1 := Player{ID: uuid.New(), present: true}
+	player2 := Player{ID: player1.ID, present: true}
 
 	err := state.Join(player1)
 	if err != nil {
 		t.Fatalf("Player1 failed to join %v", err)
 	}
 	err = state.Join(player2)
-	if err == nil {
-		t.Fatalf("Expected player2 join to fail due to duplicate id")
+	if err != nil {
+		t.Fatalf("Player1 failed to join %v", err)
+	}
+
+	expectedPlayers := []Player{player2}
+	if !reflect.DeepEqual(expectedPlayers, state.players) {
+		t.Fatalf("players slice didn't contain expected players")
 	}
 }
 
 func TestState_Leave(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 
-	player1 := Player{ID: uuid.New()}
-	player2 := Player{ID: uuid.New()}
+	player1 := Player{ID: uuid.New(), present: true}
+	player2 := Player{ID: uuid.New(), present: true}
 	state.players = []Player{player1, player2}
 
 	leaveIndex := state.Leave(player2)
@@ -73,15 +78,18 @@ func TestState_Leave(t *testing.T) {
 		t.Fatalf("Expected %d playerIndex got %d", 1, leaveIndex)
 	}
 
-	if !reflect.DeepEqual([]Player{player1}, state.players) {
-		t.Fatalf("players slice should only contain player2 after player2 leaves")
+	if !reflect.DeepEqual([]Player{player1, {ID: player2.ID, present: false}}, state.players) {
+		t.Fatalf("player2 should be marked as not present after leaving")
+	}
+	if !reflect.DeepEqual([]Player{player1}, state.Players()) {
+		t.Fatalf("Only player1 should be present after player2 leaves")
 	}
 }
 
 func TestState_Leave_NotJoined(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 
-	player1 := Player{ID: uuid.New()}
+	player1 := Player{ID: uuid.New(), present: true}
 	state.players = []Player{player1}
 
 	leaveIndex := state.Leave(Player{ID: uuid.New()})
@@ -211,6 +219,6 @@ func TestState_EncodeCanvas(t *testing.T) {
 	}
 
 	if reflect.DeepEqual(state.turn.canvas, canvas) {
-		t.Fatalf("Canvas is not the same after encoding then decoding - binary serializatin does not work")
+		t.Fatalf("Canvas is not the same after encoding then decoding - binary serialization does not work")
 	}
 }

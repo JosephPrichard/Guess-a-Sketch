@@ -8,7 +8,7 @@ import { TempMsgContext, HTTP_URL } from "../App";
 import { useNavigate } from "@solidjs/router";
 
 const MAX_PLAYER_SETTINGS = Array.from({ length: 11 }, (_, index) => 2 + index);
-const ROUNDS_SETTINGS = Array.from({ length: 6 }, (_, index) => 1 + index);
+const ROUNDS_SETTINGS = Array.from({ length: 7 }, (_, index) => 2 + index);
 const DRAW_TIME_SETTINGS = Array.from({ length: 12 }, (_, index) => 15 * (index + 1));
 
 interface Props {
@@ -39,9 +39,9 @@ async function createRoom(settings: RoomSettings): Promise<[string, boolean]> {
 }
 
 const CreateRoom = ({ onClose }: Props) => {
-    const [maxPlayersIndex, setMaxPlayersIndex] = createSignal(0);
-    const [roundsIndex, setRoundsIndex] = createSignal(0);
-    const [drawingTimeIndex, setDrawingTimeIndex] = createSignal(0);
+    const [maxPlayersIndex, setMaxPlayersIndex] = createSignal(4);
+    const [roundsIndex, setRoundsIndex] = createSignal(2);
+    const [drawingTimeIndex, setDrawingTimeIndex] = createSignal(5);
     const [customWords, setCustomWords] = createSignal<string[]>([]);
     const [isPublic, setIsPublic] = createSignal<boolean>(true);
 

@@ -79,8 +79,9 @@ type Score struct {
 }
 
 type Player struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	present bool
 }
 
 type Chat struct {
@@ -134,7 +135,7 @@ func (state *GameState) MarshalJson() []byte {
 	}
 	b, err := json.Marshal(StateJson{
 		CurrRound:  state.currRound,
-		Players:    state.players,
+		Players:    state.Players(),
 		ScoreBoard: state.scoreBoard,
 		ChatLog:    state.chatLog,
 		Turn:       turnJson,
@@ -146,6 +147,7 @@ func (state *GameState) MarshalJson() []byte {
 	}
 	return b
 }
+
 func (state *GameState) GetCurrPlayer() *Player {
 	if state.turn.currPlayerIndex < 0 {
 		return &Player{}
@@ -154,14 +156,14 @@ func (state *GameState) GetCurrPlayer() *Player {
 }
 
 func (state *GameState) PlayerIsNotHost(player Player) bool {
-	return len(state.players) < 1 || state.players[0] != player
+	return len(state.players) < 1 || state.players[0].ID != player.ID
 }
 
 func (state *GameState) playerIndex(playerToFind Player) int {
 	// find player in the slice
 	index := -1
 	for i, player := range state.players {
-		if player == playerToFind {
+		if player.ID == playerToFind.ID {
 			index = i
 			break
 		}
@@ -170,26 +172,45 @@ func (state *GameState) playerIndex(playerToFind Player) int {
 }
 
 func (state *GameState) Join(player Player) error {
-	_, exists := state.scoreBoard[player.ID]
-	if exists {
-		return errors.New("Player cannot join a state they are already in")
-	}
 	if len(state.players) >= state.settings.PlayerLimit {
 		return errors.New("Player cannot join, state is at player limit")
 	}
-	state.players = append(state.players, player)
-	state.scoreBoard[player.ID] = Score{}
+
+	index := state.playerIndex(player)
+	if index >= 0 {
+		// player already exists - they are rejoining and we mark as present
+		state.players[index].present = true
+	} else {
+		// mark the new joined player as present and add it to the end of the players
+		player.present = true
+		state.players = append(state.players, player)
+	}
+
+	_, exists := state.scoreBoard[player.ID]
+	if !exists {
+		state.scoreBoard[player.ID] = Score{}
+	}
+
 	return nil
 }
 
-func (state *GameState) Leave(playerToLeave Player) int {
-	index := state.playerIndex(playerToLeave)
+func (state *GameState) Players() []Player {
+	players := make([]Player, 0)
+	for _, player := range state.players {
+		if player.present {
+			players = append(players, player)
+		}
+	}
+	return players
+}
+
+func (state *GameState) Leave(player Player) int {
+	index := state.playerIndex(player)
 	if index == -1 {
 		// player doesn't exist in players slice - player never joined
 		return -1
 	}
-	// delete player from the slice by creating a new slice without the index
-	state.players = append(state.players[:index], state.players[index+1:]...)
+	state.players[index].present = false
 	return index
 }
 

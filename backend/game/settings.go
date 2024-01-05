@@ -13,7 +13,7 @@ const (
 	MaxTimeLimit   = 240
 	MinPlayerLimit = 2
 	MaxPlayerLimit = 12
-	MaxTotalRounds = 6
+	MaxTotalRounds = 8
 )
 
 type RoomSettings struct {
@@ -48,8 +48,8 @@ func IsSettingsValid(settings RoomSettings) error {
 	if settings.PlayerLimit < MinPlayerLimit || settings.PlayerLimit > MaxPlayerLimit {
 		return fmt.Errorf("Games can only contain between %d and %d players", MinPlayerLimit, MaxPlayerLimit)
 	}
-	if settings.TotalRounds > MaxTotalRounds || settings.TotalRounds < 0 {
-		return fmt.Errorf("Games can only have between 0 and %d rounds", MaxTotalRounds)
+	if settings.TotalRounds > MaxTotalRounds || settings.TotalRounds < 2 {
+		return fmt.Errorf("Games can only have between 2 and %d rounds", MaxTotalRounds)
 	}
 	return nil
 }

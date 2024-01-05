@@ -64,11 +64,6 @@ func HexCode(len int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-type RoomCodeResp struct {
-	Code     string            `json:"code"`
-	Settings game.RoomSettings `json:"settings"`
-}
-
 func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	EnableCors(&w)
 
@@ -101,6 +96,10 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	go room.Start()
 	server.rooms.Store(code, room)
 
+	type RoomCodeResp struct {
+		Code     string            `json:"code"`
+		Settings game.RoomSettings `json:"settings"`
+	}
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, roomCode)
@@ -133,12 +132,12 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Joined room %s with name %s and id %s", code, player.Name, player.ID)
 
-	go subscriberListener(ws, subscriber)
-	go socketListener(ws, room, subscriber)
+	go server.subscriberListener(ws, subscriber)
+	go server.socketListener(ws, room, subscriber)
 }
 
 // reads messages from socket and sends them to room
-func socketListener(ws *websocket.Conn, room game.Room, subscriber game.Subscriber) {
+func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, subscriber game.Subscriber) {
 	defer func() {
 		// unsubscribes from the room when the websocket is closed
 		room.Leave(subscriber)
@@ -161,7 +160,7 @@ func socketListener(ws *websocket.Conn, room game.Room, subscriber game.Subscrib
 }
 
 // reads messages from a subscribed channel and sends them to socket
-func subscriberListener(ws *websocket.Conn, subscriber game.Subscriber) {
+func (server *RoomsServer) subscriberListener(ws *websocket.Conn, subscriber game.Subscriber) {
 	defer func() {
 		// closes the websocket connection when the subscriber is informed no more messages will be sent
 		log.Println("Subscriber channel was closed")

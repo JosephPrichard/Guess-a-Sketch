@@ -74,10 +74,6 @@ func (server *AuthServer) GetPlayer(token string) game.Player {
 	return player
 }
 
-type TokenResp struct {
-	Token string `json:"token"`
-}
-
 func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Request) {
 	EnableCors(&w)
 
@@ -99,6 +95,9 @@ func (server *AuthServer) EstablishSession(w http.ResponseWriter, r *http.Reques
 	}
 	log.Printf("JwtSession with id %s", session.ID)
 
+	type TokenResp struct {
+		Token string `json:"token"`
+	}
 	tokenResp := TokenResp{Token: token}
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, tokenResp)

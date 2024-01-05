@@ -23,6 +23,8 @@ import (
 var words string
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	var envVars map[string]string
 	envVars, err := godotenv.Read()
 	if err != nil {
@@ -36,9 +38,6 @@ func main() {
 	dbHost := envVars["DB_HOST"]
 	dbPass := envVars["DB_PASSWORD"]
 	dbPort := envVars["DB_PORT"]
-
-	rand.Seed(time.Now().UnixNano())
-	log.Println("Started the server...")
 
 	gameWordBank := strings.Split(words, "\n")
 
@@ -57,6 +56,7 @@ func main() {
 
 	roomsStore := game.NewRoomsMap(time.Minute)
 	roomsServer := server.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
+	metaServer := server.NewMetaServer()
 
 	http.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	http.HandleFunc("/rooms/join", roomsServer.JoinRoom)
@@ -65,6 +65,9 @@ func main() {
 	http.HandleFunc("/players/leaderboard", playerServer.Leaderboard)
 	http.HandleFunc("/login", authServer.Login)
 	http.HandleFunc("/logout", authServer.Logout)
+	http.HandleFunc("/meta", metaServer.Subscribe)
+
+	log.Println("Starting the server...")
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
