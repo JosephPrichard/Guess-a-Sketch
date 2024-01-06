@@ -27,12 +27,6 @@ func NewMetaServer() *MetaServer {
 	}
 }
 
-func (server *MetaServer) broadcast() {
-	for s := range server.subscribers {
-		s <- server.clientsCount
-	}
-}
-
 func (server *MetaServer) AddSubscriber(subscriber chan int) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
@@ -50,6 +44,12 @@ func (server *MetaServer) RemoveSubscriber(subscriber chan int) {
 	delete(server.subscribers, subscriber)
 	close(subscriber)
 	server.broadcast()
+}
+
+func (server *MetaServer) broadcast() {
+	for s := range server.subscribers {
+		s <- server.clientsCount
+	}
 }
 
 func (server *MetaServer) Subscribe(w http.ResponseWriter, r *http.Request) {

@@ -5,13 +5,13 @@
 import "./Rooms.css";
 import { createSignal, For, onMount, Show, useContext } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { HTTP_URL, TempMsgContext } from "../App";
+import { BACKEND_URL, TempMsgContext } from "../App";
 
 export type RoomData = string;
 
 async function getRooms(): Promise<[RoomData[], string, boolean]> {
     try {
-        const resp = await fetch(`${HTTP_URL}/rooms`, { method: "GET", mode: "cors" });
+        const resp = await fetch(`${BACKEND_URL}/rooms`, { method: "GET", mode: "cors" });
         const json = await resp.json();
         if (resp.ok) {
             return [json, "", false];

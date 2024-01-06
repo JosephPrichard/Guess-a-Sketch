@@ -4,7 +4,7 @@
 
 import "./CreateRoom.css";
 import { For, createSignal, useContext } from "solid-js";
-import { TempMsgContext, HTTP_URL } from "../App";
+import { TempMsgContext, BACKEND_URL } from "../App";
 import { useNavigate } from "@solidjs/router";
 
 const MAX_PLAYER_SETTINGS = Array.from({ length: 11 }, (_, index) => 2 + index);
@@ -25,7 +25,7 @@ interface RoomSettings {
 
 async function createRoom(settings: RoomSettings): Promise<[string, boolean]> {
     try {
-        const resp = await fetch(`${HTTP_URL}/rooms/create`,
+        const resp = await fetch(`${BACKEND_URL}/rooms/create`,
             { method: "POST", mode: "cors", body: JSON.stringify(settings) });
         const json = await resp.json();
         if (resp.ok) {
