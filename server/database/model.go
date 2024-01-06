@@ -17,6 +17,6 @@ type Player struct {
 type Drawing struct {
 	ID        int8   `db:"id"`
 	CreatedBy string `db:"created_by"`
-	SavedBy   string `db:"saved_by""`
+	SavedBy   string `db:"saved_by"`
 	Signature string `db:"signature"`
 }

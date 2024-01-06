@@ -6,7 +6,7 @@ package server
 
 import (
 	"github.com/google/uuid"
-	"guessasketch/database"
+	"guessthesketch/database"
 	"net/http"
 
 	"github.com/jmoiron/sqlx"

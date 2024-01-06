@@ -7,7 +7,7 @@ package server
 import (
 	"errors"
 	"fmt"
-	"guessasketch/game"
+	"guessthesketch/game"
 	"log"
 	"math/rand"
 	"net/http"

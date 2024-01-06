@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"guessasketch/game"
+	"guessthesketch/game"
 	"log"
 	"strings"
 

@@ -7,7 +7,7 @@ package server
 import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
-	"guessasketch/game"
+	"guessthesketch/game"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
