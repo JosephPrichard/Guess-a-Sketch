@@ -7,10 +7,11 @@ import "./ScoreBoard.css";
 import { createMutable } from "solid-js/store";
 import { RoomProps } from "../pages/Room";
 
-type ScoreBoard = {[key:string]:number};
+export type Score = {points: number}
+
+export type ScoreBoard = {[key:string]:Score};
 
 const ScoreBoard = ({ room }: RoomProps) => {
-    const [players, setPlayers] = createSignal<string[]>([]);
     const scoreBoard = createMutable<ScoreBoard>({});
 
     return (
@@ -21,14 +22,14 @@ const ScoreBoard = ({ room }: RoomProps) => {
                 </span>
             </div>
             <div class="ScorePlayers">
-                <For each={players()}>
+                <For each={room.players()}>
                     {(player) =>  (
                         <div class="Score">
                             <span>
-                                {player}
+                                {player.name}
                             </span>
                             <span>
-                                {scoreBoard[player]}
+                                {scoreBoard[player.id].points}
                             </span>
                         </div>
                     )}

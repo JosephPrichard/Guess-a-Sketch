@@ -3,7 +3,6 @@
  */
 
 export const [
-    OPTIONS_CODE,
     START_CODE,
     TEXT_CODE,
     DRAW_CODE,
@@ -12,12 +11,14 @@ export const [
     BEGIN_CODE,
     JOIN_CODE,
     LEAVE_CODE,
-    TIMEOUT_CODE
-] = Array.from(Array(11).keys());
+    TIMEOUT_CODE,
+    SAVE_CODE,
+    STATE_CODE
+] = Array.from(Array(11).keys()).map(i => i+1);
 
-export interface Payload {
+export interface Payload<T = any> {
     code: number;
-    msg: any;
+    msg: T;
 }
 
 export interface Player {

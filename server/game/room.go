@@ -15,7 +15,7 @@ import (
 type Room interface {
 	Start()
 	Join(m SubscriberMsg)
-	Leave(s Subscriber)
+	Leave(s chan []byte)
 	SendMessage(m SentMsg)
 	Stop(c int)
 	IsExpired(now time.Time) bool
@@ -25,12 +25,12 @@ type Room interface {
 // an implementation of the game against the room interface flow control
 type GameRoom struct {
 	join        chan SubscriberMsg
-	leave       chan Subscriber
+	leave       chan chan []byte
 	sendMessage chan SentMsg
 	reset       chan struct{}
 	stop        chan int
 	state       GameState
-	subscribers map[Subscriber]Player
+	subscribers map[chan []byte]Player
 	expireTime  atomic.Int64
 	isPublic    bool
 	worker      RoomWorker
@@ -42,15 +42,13 @@ type RoomWorker interface {
 	DoCapture(snap Snapshot)
 }
 
-type Subscriber = chan []byte
-
 type SentMsg struct {
 	Message []byte
-	Sender  Subscriber
+	Sender  chan []byte
 }
 
 type SubscriberMsg struct {
-	Subscriber Subscriber
+	Subscriber chan []byte
 	Player     Player
 }
 
@@ -58,12 +56,12 @@ func NewGameRoom(initialState GameState, tasks RoomWorker) Room {
 	// create the room with all channels and state
 	room := &GameRoom{
 		join:        make(chan SubscriberMsg),
-		leave:       make(chan Subscriber),
+		leave:       make(chan chan []byte),
 		sendMessage: make(chan SentMsg),
 		reset:       make(chan struct{}),
 		stop:        make(chan int),
 		worker:      tasks,
-		subscribers: make(map[Subscriber]Player),
+		subscribers: make(map[chan []byte]Player),
 		state:       initialState,
 		isPublic:    initialState.settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
 	}
@@ -74,7 +72,7 @@ func NewGameRoom(initialState GameState, tasks RoomWorker) Room {
 func (room *GameRoom) Start() {
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			log.Println(panicInfo)
+			log.Println("Fatal error in room: ", panicInfo)
 		}
 	}()
 	for {
@@ -98,7 +96,7 @@ func (room *GameRoom) Join(m SubscriberMsg) {
 	room.join <- m
 }
 
-func (room *GameRoom) Leave(s Subscriber) {
+func (room *GameRoom) Leave(s chan []byte) {
 	room.leave <- s
 }
 
@@ -163,10 +161,19 @@ func (room *GameRoom) onSubscribe(subMsg SubscriberMsg) {
 	room.subscribers[subMsg.Subscriber] = subMsg.Player
 
 	room.broadcast(resp)
-	subMsg.Subscriber <- room.state.MarshalJson()
+
+	// handle the initial message for the room only send to the subscriber
+	resp, err = room.HandleState()
+	if err != nil {
+		// only the sender should receive the error response
+		sendErrorMsg(subMsg.Subscriber, err.Error())
+		close(subMsg.Subscriber)
+		return
+	}
+	subMsg.Subscriber <- resp
 }
 
-func (room *GameRoom) onUnsubscribe(subscriber Subscriber) {
+func (room *GameRoom) onUnsubscribe(subscriber chan []byte) {
 	player := room.subscribers[subscriber]
 	resp, err := HandleLeave(&room.state, player)
 	if err != nil {

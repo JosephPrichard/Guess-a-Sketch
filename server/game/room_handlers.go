@@ -22,6 +22,7 @@ const (
 	LeaveCode   = 8
 	TimeoutCode = 9
 	SaveCode    = 10
+	StateCode   = 11
 	MinChatLen  = 5
 	MaxChatLen  = 50
 )
@@ -185,6 +186,12 @@ func (room *GameRoom) HandleReset() ([]byte, error) {
 
 	msg := FinishMsg{BeginMsg: beginMsg, DrawScoreInc: pointsInc}
 	return createResponse(FinishCode, msg)
+}
+
+func (room *GameRoom) HandleState() ([]byte, error) {
+	state := &room.state
+	b := state.MarshalJson()
+	return createResponse[json.RawMessage](StateCode, b)
 }
 
 func createResponse[T any](code int, msg T) ([]byte, error) {

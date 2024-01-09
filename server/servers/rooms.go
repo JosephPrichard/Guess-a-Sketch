@@ -2,14 +2,13 @@
  * Copyright (c) Joseph Prichard 2023
  */
 
-package server
+package servers
 
 import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
-	"guessthesketch/database"
 	"guessthesketch/game"
 	"log"
 	"net/http"
@@ -127,7 +126,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a new subscription channel and join the room with it
-	subscriber := make(game.Subscriber)
+	subscriber := make(chan []byte)
 	room.Join(game.SubscriberMsg{Subscriber: subscriber, Player: player})
 
 	log.Printf("Joined room %s with name %s and id %s", code, player.Name, player.ID)
@@ -137,7 +136,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 // reads messages from socket and sends them to room
-func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, subscriber game.Subscriber) {
+func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, subscriber chan []byte) {
 	defer func() {
 		// unsubscribes from the room when the websocket is closed
 		room.Leave(subscriber)
@@ -160,7 +159,7 @@ func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, su
 }
 
 // reads messages from a subscribed channel and sends them to socket
-func (server *RoomsServer) subscriberListener(ws *websocket.Conn, subscriber game.Subscriber) {
+func (server *RoomsServer) subscriberListener(ws *websocket.Conn, subscriber chan []byte) {
 	defer func() {
 		// closes the websocket connection when the subscriber is informed no more messages will be sent
 		log.Println("Subscriber channel was closed")
@@ -190,10 +189,10 @@ func NewRoomServer(db *sqlx.DB) *RoomServer {
 
 func (server RoomServer) DoShutdown(results []game.GameResult) {
 	// perform the batch update stats on a separate goroutine
-	go database.UpdateStats(server.db, results)
+	//go database.UpdateStats(server.db, results)
 }
 
 func (server RoomServer) DoCapture(drawing game.Snapshot) {
 	// perform a capture operation on a separate goroutine
-	go database.SaveDrawing(server.db, drawing)
+	//go database.SaveDrawing(server.db, drawing)
 }

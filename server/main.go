@@ -13,7 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"guessthesketch/game"
-	"guessthesketch/server"
+	"guessthesketch/servers"
 	"io/fs"
 	"log"
 	"math/rand"
@@ -56,13 +56,13 @@ func main() {
 		return
 	}
 
-	roomServer := server.NewRoomServer(db)
-	authServer := server.NewAuthServer(jwtSecretKey)
-	playerServer := server.NewPlayerServer(db, authServer)
+	roomServer := servers.NewRoomServer(db)
+	authServer := servers.NewAuthServer(jwtSecretKey)
+	playerServer := servers.NewPlayerServer(db, authServer)
 
 	roomsStore := game.NewRoomsMap(time.Minute)
-	roomsServer := server.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
-	metaServer := server.NewMetaServer()
+	roomsServer := servers.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
+	metaServer := servers.NewMetaServer()
 
 	router := mux.NewRouter()
 
@@ -79,7 +79,6 @@ func main() {
 	addFileServer(router)
 
 	log.Println("Starting the server...")
-
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
 
@@ -96,12 +95,13 @@ func addFileServer(router *mux.Router) {
 		log.Fatal(err)
 	}
 	fileHandler := http.FileServer(http.FS(fsys))
+
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		url := r.URL.String()
 
 		// empty route serves index html
 		if url == "/" || url == "" {
-			w.Header().Add("Content-type", "text/html")
+			w.Header().Add("Content-type", "text/html")														
 		}
 
 		tokens := strings.Split(url, ".")

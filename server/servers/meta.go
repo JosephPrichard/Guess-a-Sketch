@@ -2,7 +2,7 @@
  * Copyright (c) Joseph Prichard 2024
  */
 
-package server
+package servers
 
 import (
 	"encoding/json"

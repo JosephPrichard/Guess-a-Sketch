@@ -6,6 +6,7 @@ package game
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -55,7 +56,7 @@ type StateJson struct {
 type TurnJson struct {
 	CurrWord   string  `json:"currWord"`
 	CurrPlayer *Player `json:"currPlayer"`
-	Canvas     []byte  `json:"canvas"`
+	Canvas     string  `json:"canvas"`
 }
 
 type Circle struct {
@@ -67,15 +68,15 @@ type Circle struct {
 }
 
 type Snapshot struct {
-	SavedBy   *Player
-	CreatedBy *Player
-	Canvas    []byte
+	SavedBy   Player
+	CreatedBy Player
+	Canvas    string
 }
 
 type Score struct {
 	Points   int `json:"points"`
-	Words    int
-	Drawings int
+	words    int
+	drawings int
 }
 
 type Player struct {
@@ -111,20 +112,26 @@ func (state *GameState) Code() string {
 	return state.code
 }
 
-func (state *GameState) EncodeCanvas() []byte {
+func (state *GameState) EncodeCanvas() string {
+	if len(state.turn.canvas) == 0 {
+		return ""
+	}
+
 	var buf bytes.Buffer
 	err := binary.Write(&buf, binary.LittleEndian, state.turn.canvas)
 	if err != nil {
 		log.Println(err.Error())
-		return []byte{}
+		return ""
 	}
-	return buf.Bytes()
+
+	base64Encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return base64Encoded
 }
 
 func (state *GameState) MarshalJson() []byte {
 	currIdx := state.turn.currPlayerIndex
 	var curr *Player
-	if currIdx > 0 && currIdx < len(state.players) {
+	if currIdx >= 0 && currIdx < len(state.players) {
 		curr = &state.players[currIdx]
 	}
 
@@ -148,11 +155,11 @@ func (state *GameState) MarshalJson() []byte {
 	return b
 }
 
-func (state *GameState) GetCurrPlayer() *Player {
+func (state *GameState) GetCurrPlayer() Player {
 	if state.turn.currPlayerIndex < 0 {
-		return &Player{}
+		return Player{}
 	}
-	return &state.players[state.turn.currPlayerIndex]
+	return state.players[state.turn.currPlayerIndex]
 }
 
 func (state *GameState) PlayerIsNotHost(player Player) bool {
@@ -297,7 +304,7 @@ func (state *GameState) guess(guesser Player, text string) int {
 	elapsed := time.Now().Unix() - state.turn.startTimeSecs
 	limit := state.settings.TimeLimitSecs
 	pointsInc := (limit-int(elapsed))/limit*400 + 50
-	state.incScore(&guesser, Score{Points: pointsInc, Words: 1})
+	state.incScore(guesser, Score{Points: pointsInc, words: 1})
 
 	state.turn.guessers[guesser.ID] = true
 	return pointsInc
@@ -312,17 +319,17 @@ func (state *GameState) containsCurrWord(text string) bool {
 	return false
 }
 
-func (state *GameState) incScore(player *Player, s Score) {
+func (state *GameState) incScore(player Player, s Score) {
 	score, _ := state.scoreBoard[player.ID]
 	score.Points += s.Points
-	score.Words += s.Words
-	score.Drawings += s.Drawings
+	score.words += s.words
+	score.drawings += s.drawings
 	state.scoreBoard[player.ID] = score
 }
 
 func (state *GameState) OnReset() int {
 	pointsInc := state.calcResetScore()
-	state.incScore(state.GetCurrPlayer(), Score{Points: pointsInc, Drawings: 1})
+	state.incScore(state.GetCurrPlayer(), Score{Points: pointsInc, drawings: 1})
 	return pointsInc
 }
 
@@ -342,7 +349,7 @@ func (state *GameState) Capture(player Player) Snapshot {
 	return Snapshot{
 		Canvas:    state.EncodeCanvas(),
 		CreatedBy: state.GetCurrPlayer(),
-		SavedBy:   &player,
+		SavedBy:   player,
 	}
 }
 
@@ -364,8 +371,8 @@ func (state *GameState) CreateGameResults() []GameResult {
 		results = append(results, GameResult{
 			PlayerID:        id,
 			Points:          score.Points,
-			WordsGuessed:    score.Words,
-			DrawingsGuessed: score.Drawings,
+			WordsGuessed:    score.words,
+			DrawingsGuessed: score.drawings,
 		})
 	}
 

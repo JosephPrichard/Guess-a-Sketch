@@ -6,6 +6,7 @@ package game
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"github.com/google/uuid"
 	"reflect"
@@ -137,7 +138,7 @@ func TestState_TryGuess(t *testing.T) {
 	}
 
 	guesserScore, ok := state.scoreBoard[guesser.ID]
-	if !ok || guesserScore.Words != 1 {
+	if !ok || guesserScore.words != 1 {
 		t.Fatalf("Scoreboard didn't contain expected a properly updated score for the guesser")
 	}
 }
@@ -188,9 +189,9 @@ func TestState_CreateGameResult(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 
 	state.scoreBoard = map[uuid.UUID]Score{
-		uuid.New(): {Points: 100, Words: 1, Drawings: 2},
-		uuid.New(): {Points: 200, Words: 2, Drawings: 2},
-		uuid.New(): {Points: 250, Words: 3, Drawings: 2},
+		uuid.New(): {Points: 100, words: 1, drawings: 2},
+		uuid.New(): {Points: 200, words: 2, drawings: 2},
+		uuid.New(): {Points: 250, words: 3, drawings: 2},
 	}
 
 	results := state.CreateGameResults()
@@ -205,15 +206,26 @@ func TestState_CreateGameResult(t *testing.T) {
 
 func TestState_EncodeCanvas(t *testing.T) {
 	state := NewGameState("123", MockSettings())
-	state.turn.canvas = []Circle{{X: 1, Y: 1}, {X: 1, Y: 1}}
+	state.turn.canvas = []Circle{
+		{Color: 4, Radius: 3, X: 2, Y: 1, Connected: true},
+		{Color: 5, X: 1, Y: 2, Connected: false}}
 
-	b := state.EncodeCanvas()
+	s := state.EncodeCanvas()
+	t.Logf("Canvas as string %s", s)
 
 	var buf bytes.Buffer
-	buf.Write(b)
+	base64Decoded, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		t.Fatalf("Error reading %v", err)
+	}
+
+	_, err = buf.Write(base64Decoded)
+	if err != nil {
+		t.Fatalf("Error reading %v", err)
+	}
 
 	var canvas []Circle
-	err := binary.Read(&buf, binary.LittleEndian, canvas)
+	err = binary.Read(&buf, binary.LittleEndian, canvas)
 	if err != nil {
 		t.Fatalf("Error reading %v", err)
 	}

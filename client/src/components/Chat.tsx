@@ -5,7 +5,8 @@
 import "./Chat.css"
 import { For, createSignal, Show } from "solid-js";
 import { RoomProps } from "../pages/Room";
-import { CHAT_CODE, Player, TEXT_CODE } from "../websocket/messages";
+import { CHAT_CODE, Player, STATE_CODE, TEXT_CODE } from "../websocket/messages";
+import { StateMsg } from "../websocket/state";
 
 export interface ChatMsg {
     text: string;
@@ -17,8 +18,13 @@ const Chat = ({ room }: RoomProps) => {
     const [newChat, setNewChat] = createSignal("");
     const [chats, setChats] = createSignal<ChatMsg[]>([]);
 
-    room.subscribe(CHAT_CODE, (payload) => {
-        const msg = payload.msg as ChatMsg;
+    room.subscribe<StateMsg>(STATE_CODE, (payload) => {
+        const msg = payload.msg;
+        setChats(msg.chatLog);
+    });
+
+    room.subscribe<ChatMsg>(CHAT_CODE, (payload) => {
+        const msg = payload.msg;
         setChats([...chats(), msg]);
     });
 
@@ -29,9 +35,7 @@ const Chat = ({ room }: RoomProps) => {
             </div>
             <div>
                 <For each={chats()}>
-                    {(chat) => (
-                        <ChatMsg {...chat}/>
-                    )}
+                    {(chat) => <ChatMsg {...chat}/>}
                 </For>
             </div>
             <input

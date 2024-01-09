@@ -20,7 +20,7 @@ func (stub *StubRoom) Start() {}
 
 func (stub *StubRoom) Join(_ SubscriberMsg) {}
 
-func (stub *StubRoom) Leave(_ Subscriber) {}
+func (stub *StubRoom) Leave(_ chan []byte) {}
 
 func (stub *StubRoom) SendMessage(_ SentMsg) {}
 

@@ -104,7 +104,7 @@ func SaveDrawing(db *sqlx.DB, d game.Snapshot) {
 	drawing := Drawing{
 		SavedBy:   d.SavedBy.ID.String(),
 		CreatedBy: d.CreatedBy.ID.String(),
-		Signature: string(d.Canvas),
+		Signature: d.Canvas,
 	}
 	query := "INSERT INTO players (created_by, saved_by, signature) VALUES ($1, $2, $3)"
 	_, err := db.Query(query, drawing.CreatedBy, drawing.SavedBy, drawing.Signature)

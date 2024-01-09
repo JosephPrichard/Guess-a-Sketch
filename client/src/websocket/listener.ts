@@ -5,12 +5,12 @@
 import { Accessor, createSignal, onCleanup, onMount } from "solid-js";
 import { WS_URL } from "../App";
 import { Payload, JOIN_CODE, PlayerMsg, Player } from "./messages";
-type RoomEvent = (payload: Payload) => void;
+type RoomEvent<T = any> = (payload: Payload<T>) => void;
 type RoomStatus = "opened" | "closed" | "error" | "unopened" | "noexist";
 
 export interface RoomConn {
     send: <T extends Payload>(payload: T) => void;
-    subscribe: (code: number, event: RoomEvent) => void;
+    subscribe: <T = any>(code: number, event: RoomEvent<T>) => void;
     players: Accessor<Player[]>;
     status: Accessor<RoomStatus>;
 }
@@ -63,7 +63,7 @@ export const useRoomConnection = (roomCode: string): RoomConn => {
         sock?.send(m);
     };
 
-    const subscribe = (code: number, event: RoomEvent) => {
+    const subscribe = <T = any>(code: number, event: RoomEvent<T>) => {
         let handlers = handlerMap.get(code);
         if (!handlers) {
             handlers = [];
@@ -72,8 +72,8 @@ export const useRoomConnection = (roomCode: string): RoomConn => {
         handlerMap.set(code, handlers);
     };
 
-    subscribe(JOIN_CODE, (payload) => {
-        const msg = payload.msg as PlayerMsg;
+    subscribe<PlayerMsg>(JOIN_CODE, (payload) => {
+        const msg = payload.msg;
         const newPlayers = [...players()];
         newPlayers[msg.playerIndex] = msg.player;
         setPlayers(newPlayers);
