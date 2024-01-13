@@ -23,8 +23,13 @@ const (
 	TimeoutCode = 9
 	SaveCode    = 10
 	StateCode   = 11
-	MinChatLen  = 5
-	MaxChatLen  = 50
+
+	MinChatLen = 5
+	MaxChatLen = 50
+	MaxX       = 1000
+	MaxY       = 1000
+	MaxRadius  = 8
+	MaxColor   = 8
 )
 
 var ErrUnMarshal = errors.New("Failed to unmarshal input data")
@@ -68,7 +73,7 @@ func (room *GameRoom) HandleMessage(message []byte, player Player) ([]byte, erro
 		return room.handleDrawMessage(inputMsg, player)
 	case SaveCode:
 		capture := room.state.Capture(player)
-		room.worker.DoCapture(capture)
+		room.handler.DoCapture(capture)
 		return nil, nil
 	default:
 		log.Println("Cannot handle unknown message type")
@@ -118,7 +123,6 @@ func (room *GameRoom) handleTextMessage(msg TextMsg, player Player) ([]byte, err
 
 type DrawMsg = Circle
 
-// color, radius, x, and y are unvalidated fields for performance
 func (room *GameRoom) handleDrawMessage(msg DrawMsg, player Player) ([]byte, error) {
 	state := &room.state
 
@@ -127,6 +131,15 @@ func (room *GameRoom) handleDrawMessage(msg DrawMsg, player Player) ([]byte, err
 	}
 	if player.ID != state.GetCurrPlayer().ID {
 		return nil, errors.New("Player cannot draw on the canvas")
+	}
+	if msg.X < 0 || msg.X > MaxX || msg.Y < 0 || msg.Y > MaxY {
+		return nil, errors.New("Cannot draw outside canvas")
+	}
+	if msg.Radius < 0 || msg.Radius > MaxRadius {
+		return nil, fmt.Errorf("Unknown code for radius %d", msg.Radius)
+	}
+	if msg.Color < 0 || msg.Color > MaxColor {
+		return nil, fmt.Errorf("Unknown code for color %d", msg.Color)
 	}
 
 	state.Draw(msg)

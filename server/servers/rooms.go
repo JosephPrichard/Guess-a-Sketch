@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
+	"guessthesketch/database"
 	"guessthesketch/game"
 	"log"
 	"net/http"
@@ -19,11 +20,11 @@ type RoomsServer struct {
 	upgrade       websocket.Upgrader
 	rooms         game.RoomsStore
 	authenticator Authenticator
-	worker        game.RoomWorker
+	worker        game.EventHandler
 	gameWordBank  []string
 }
 
-func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, worker game.RoomWorker, gameWordBank []string) *RoomsServer {
+func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, worker game.EventHandler, gameWordBank []string) *RoomsServer {
 	return &RoomsServer{
 		upgrade:       CreateUpgrade(),
 		rooms:         rooms,
@@ -33,7 +34,7 @@ func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, worker g
 	}
 }
 
-func (server *RoomsServer) Rooms(w http.ResponseWriter, r *http.Request) {
+func (server *RoomsServer) GetRooms(w http.ResponseWriter, r *http.Request) {
 	EnableCors(&w)
 
 	query := r.URL.Query()
@@ -61,6 +62,11 @@ func HexCode(len int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+type RoomCodeResp struct {
+	Code     string            `json:"code"`
+	Settings game.RoomSettings `json:"settings"`
 }
 
 func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
@@ -95,10 +101,6 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	go room.Start()
 	server.rooms.Store(code, room)
 
-	type RoomCodeResp struct {
-		Code     string            `json:"code"`
-		Settings game.RoomSettings `json:"settings"`
-	}
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, roomCode)
@@ -147,14 +149,14 @@ func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, su
 		}
 	}()
 	for {
-		_, p, err := ws.ReadMessage()
+		_, buf, err := ws.ReadMessage()
 		if err != nil {
 			log.Printf("Client closed connection with err %s", err.Error())
 			return
 		}
 		// read any message from the socket and broadcast it to the room
-		log.Println("Receiving message", string(p))
-		room.SendMessage(game.SentMsg{Message: p, Sender: subscriber})
+		log.Println("Receiving message", string(buf))
+		room.SendMessage(game.SentMsg{Message: buf, Sender: subscriber})
 	}
 }
 
@@ -189,10 +191,10 @@ func NewRoomServer(db *sqlx.DB) *RoomServer {
 
 func (server RoomServer) DoShutdown(results []game.GameResult) {
 	// perform the batch update stats on a separate goroutine
-	//go database.UpdateStats(server.db, results)
+	go database.UpdateStats(server.db, results)
 }
 
 func (server RoomServer) DoCapture(drawing game.Snapshot) {
 	// perform a capture operation on a separate goroutine
-	//go database.SaveDrawing(server.db, drawing)
+	go database.SaveDrawing(server.db, drawing)
 }

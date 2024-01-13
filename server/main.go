@@ -62,19 +62,19 @@ func main() {
 
 	roomsStore := game.NewRoomsMap(time.Minute)
 	roomsServer := servers.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
-	metaServer := servers.NewMetaServer()
+	telemetryServer := servers.NewTelemetryServer()
 
 	router := mux.NewRouter()
 
 	apiRouter := router.PathPrefix("/api").Subrouter()
 	apiRouter.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	apiRouter.HandleFunc("/rooms/join", roomsServer.JoinRoom)
-	apiRouter.HandleFunc("/rooms", roomsServer.Rooms)
+	apiRouter.HandleFunc("/rooms", roomsServer.GetRooms)
 	apiRouter.HandleFunc("/players/stats", playerServer.Get)
 	apiRouter.HandleFunc("/players/leaderboard", playerServer.Leaderboard)
 	apiRouter.HandleFunc("/login", authServer.Login)
 	apiRouter.HandleFunc("/logout", authServer.Logout)
-	apiRouter.HandleFunc("/meta", metaServer.Subscribe)
+	apiRouter.HandleFunc("/telemetry/subscribe", telemetryServer.Subscribe)
 
 	addFileServer(router)
 
@@ -101,7 +101,7 @@ func addFileServer(router *mux.Router) {
 
 		// empty route serves index html
 		if url == "/" || url == "" {
-			w.Header().Add("Content-type", "text/html")														
+			w.Header().Add("Content-type", "text/html")
 		}
 
 		tokens := strings.Split(url, ".")

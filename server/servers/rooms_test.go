@@ -85,10 +85,10 @@ func beforeTestJoinRoom(t *testing.T, initialState game.GameState) (*httptest.Se
 
 	player := GuestUser()
 	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{testPlayer: player}, &FakeWorker{}, []string{})
+
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 
 	u := "ws" + strings.TrimPrefix(s.URL, "http") + "?code=" + initialState.Code()
-
 	ws, _, err := websocket.DefaultDialer.Dial(u, nil)
 	if err != nil {
 		t.Fatalf("%v", err)

@@ -9,10 +9,13 @@ import { DRAW_CODE, STATE_CODE } from "../websocket/messages";
 import { ChatMsg } from "./Chat";
 import { StateMsg } from "../websocket/state";
 
+// the index is the server code and the value is how the client represents it
+// colors 0-12
 const COLORS = [
     "black", "white", "grey", "red", "orange", "yellow", "lime", 
     "darkgreen", "cyan", "blue", "purple", "pink", "brown",
 ];
+// radius 0-5
 const RADII = [4, 6, 8, 12, 16, 20];
 
 interface Point {

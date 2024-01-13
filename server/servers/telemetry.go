@@ -12,22 +12,22 @@ import (
 	"sync"
 )
 
-type MetaServer struct {
+type TelemetryServer struct {
 	upgrade      websocket.Upgrader
 	clientsCount int
 	subscribers  map[chan int]struct{}
 	mu           sync.Mutex // used to synchronize player store
 }
 
-func NewMetaServer() *MetaServer {
-	return &MetaServer{
+func NewTelemetryServer() *TelemetryServer {
+	return &TelemetryServer{
 		upgrade:      CreateUpgrade(),
 		clientsCount: 0,
 		subscribers:  make(map[chan int]struct{}),
 	}
 }
 
-func (server *MetaServer) AddSubscriber(subscriber chan int) {
+func (server *TelemetryServer) AddSubscriber(subscriber chan int) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
@@ -36,7 +36,7 @@ func (server *MetaServer) AddSubscriber(subscriber chan int) {
 	server.broadcast()
 }
 
-func (server *MetaServer) RemoveSubscriber(subscriber chan int) {
+func (server *TelemetryServer) RemoveSubscriber(subscriber chan int) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
@@ -46,13 +46,13 @@ func (server *MetaServer) RemoveSubscriber(subscriber chan int) {
 	server.broadcast()
 }
 
-func (server *MetaServer) broadcast() {
+func (server *TelemetryServer) broadcast() {
 	for s := range server.subscribers {
 		s <- server.clientsCount
 	}
 }
 
-func (server *MetaServer) Subscribe(w http.ResponseWriter, r *http.Request) {
+func (server *TelemetryServer) Subscribe(w http.ResponseWriter, r *http.Request) {
 	EnableCors(&w)
 
 	subscriber := make(chan int)
@@ -69,7 +69,7 @@ func (server *MetaServer) Subscribe(w http.ResponseWriter, r *http.Request) {
 	server.AddSubscriber(subscriber)
 }
 
-func (server *MetaServer) socketListener(ws *websocket.Conn, subscriber chan int) {
+func (server *TelemetryServer) socketListener(ws *websocket.Conn, subscriber chan int) {
 	defer func() {
 		// remove the subscriber when the connection ends
 		server.RemoveSubscriber(subscriber)
@@ -89,7 +89,7 @@ func (server *MetaServer) socketListener(ws *websocket.Conn, subscriber chan int
 	}
 }
 
-func (server *MetaServer) subscriberListener(ws *websocket.Conn, subscriber chan int) {
+func (server *TelemetryServer) subscriberListener(ws *websocket.Conn, subscriber chan int) {
 	defer func() {
 		log.Println("Meta subscriber channel was closed")
 		_ = ws.Close()

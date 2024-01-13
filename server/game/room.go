@@ -33,11 +33,11 @@ type GameRoom struct {
 	subscribers map[chan []byte]Player
 	expireTime  atomic.Int64
 	isPublic    bool
-	worker      RoomWorker
+	handler     EventHandler
 }
 
-// background worker for a room to be implemented by the caller
-type RoomWorker interface {
+// responsible for handling background events
+type EventHandler interface {
 	DoShutdown(results []GameResult)
 	DoCapture(snap Snapshot)
 }
@@ -52,7 +52,7 @@ type SubscriberMsg struct {
 	Player     Player
 }
 
-func NewGameRoom(initialState GameState, tasks RoomWorker) Room {
+func NewGameRoom(initialState GameState, handler EventHandler) Room {
 	// create the room with all channels and state
 	room := &GameRoom{
 		join:        make(chan SubscriberMsg),
@@ -60,7 +60,7 @@ func NewGameRoom(initialState GameState, tasks RoomWorker) Room {
 		sendMessage: make(chan SentMsg),
 		reset:       make(chan struct{}),
 		stop:        make(chan int),
-		worker:      tasks,
+		handler:     handler,
 		subscribers: make(map[chan []byte]Player),
 		state:       initialState,
 		isPublic:    initialState.settings.IsPublic, // copied into the room so caller can see if the room is public without looking at game state
@@ -221,7 +221,7 @@ func (room *GameRoom) onResetState() {
 	room.broadcast(resp)
 	// check to handle the shutdown task
 	if !room.state.HasMoreRounds() {
-		room.worker.DoShutdown(room.state.CreateGameResults())
+		room.handler.DoShutdown(room.state.CreateGameResults())
 	}
 }
 
