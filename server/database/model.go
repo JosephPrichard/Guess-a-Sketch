@@ -7,15 +7,14 @@ package database
 type Player struct {
 	ID              string `db:"id"`
 	Username        string `db:"username"`
-	Points          uint32 `db:"points"`
-	Wins            uint32 `db:"wins"`
-	WordsGuessed    uint32 `db:"words_guessed"`
-	DrawingsGuessed uint32 `db:"drawings_guessed"`
-	//Avatar          string `db:"id"`
+	Points          int    `db:"points"`
+	Wins            int    `db:"wins"`
+	WordsGuessed    int    `db:"words_guessed"`
+	DrawingsGuessed int    `db:"drawings_guessed"`
 }
 
 type Drawing struct {
-	ID        int8   `db:"id"`
+	ID        string `db:"id"`
 	CreatedBy string `db:"created_by"`
 	SavedBy   string `db:"saved_by"`
 	Signature string `db:"signature"`

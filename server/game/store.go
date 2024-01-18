@@ -10,100 +10,100 @@ import (
 	"time"
 )
 
-type RoomsStore interface {
-	Load(code string) Room
-	Store(code string, room Room)
+type Brokerage interface {
+	Get(code string) Broker
+	Set(code string, b Broker)
 	Codes(offset int, limit int) []string
 }
 
-type RoomsMap struct {
-	m     map[string]Room // maps codes to rooms
-	codes []string        // stores the codes of the  rooms with older rooms last
-	mu    sync.Mutex      // used to synchronize both structures
+type BrokerStore struct {
+	m     map[string]Broker // maps codes to brokers
+	codes []string          // stores the codes of the older brokers last
+	mu    sync.Mutex        // used to synchronize both structures
 }
 
-func NewRoomsMap(period time.Duration) *RoomsMap {
-	rooms := &RoomsMap{
-		m:     make(map[string]Room),
+func NewBrokerStore(period time.Duration) *BrokerStore {
+	rooms := &BrokerStore{
+		m:     make(map[string]Broker),
 		codes: make([]string, 0),
 	}
 	go rooms.startCleanup(period)
 	return rooms
 }
 
-func (m *RoomsMap) Load(code string) Room {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (store *BrokerStore) Get(code string) Broker {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
-	room, ok := m.m[code]
+	room, ok := store.m[code]
 	if !ok || room.IsExpired(time.Now()) {
 		return nil
 	}
 	return room
 }
 
-func (m *RoomsMap) Store(code string, room Room) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (store *BrokerStore) Set(code string, b Broker) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
-	m.m[code] = room
-	// only add codes for public m into the list of all codes
-	if room.IsPublic() {
-		m.codes = append(m.codes, code)
+	store.m[code] = b
+	// only add codes for public broker into the list of all codes
+	if b.IsPublic() {
+		store.codes = append(store.codes, code)
 	}
 }
 
-func (m *RoomsMap) Codes(offset int, limit int) []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (store *BrokerStore) Codes(offset int, limit int) []string {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	codes := make([]string, 0)
 
 	upperLimit := offset + limit
-	if len(m.codes) < upperLimit {
-		upperLimit = len(m.codes)
+	if len(store.codes) < upperLimit {
+		upperLimit = len(store.codes)
 	}
 
 	for i := offset; i < upperLimit; i++ {
-		c := m.codes[i]
+		c := store.codes[i]
 		codes = append(codes, c)
 	}
 	return codes
 }
 
-func (m *RoomsMap) purgeExpired(now time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (store *BrokerStore) purgeExpired(now time.Time) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	expiredCodes := make(map[string]bool)
-	for code, room := range m.m {
+	for code, room := range store.m {
 		// check if this room has expired already, if so delete it
 		if room.IsExpired(now) {
 			log.Printf("Deleting room for code %s", code)
 			// terminate the room due to expiration with a timeout code
 			room.Stop(TimeoutCode)
-			delete(m.m, code)
+			delete(store.m, code)
 			expiredCodes[code] = true
 		}
 	}
 	// remove all expired codes from the slice
-	for i := 0; i < len(m.codes); i++ {
-		code := m.codes[i]
+	for i := 0; i < len(store.codes); i++ {
+		code := store.codes[i]
 		_, expired := expiredCodes[code]
 		if expired {
-			if i < len(m.codes) {
-				m.codes = append(m.codes[:i], m.codes[i+1:]...)
+			if i < len(store.codes) {
+				store.codes = append(store.codes[:i], store.codes[i+1:]...)
 			} else {
-				m.codes = m.codes[:i]
+				store.codes = store.codes[:i]
 			}
 			i--
 		}
 	}
 }
 
-func (m *RoomsMap) startCleanup(period time.Duration) {
+func (store *BrokerStore) startCleanup(period time.Duration) {
 	// periodically cleanup expired keys from the map
 	for now := range time.NewTicker(period).C {
-		m.purgeExpired(now)
+		store.purgeExpired(now)
 	}
 }

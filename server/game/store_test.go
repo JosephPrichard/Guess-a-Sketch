@@ -10,33 +10,33 @@ import (
 	"time"
 )
 
-type StubRoom struct {
+type StubBroker struct {
 	code      string
 	stopCode  int
 	isExpired bool
 }
 
-func (stub *StubRoom) Start() {}
+func (stub *StubBroker) Start() {}
 
-func (stub *StubRoom) Join(_ SubscriberMsg) {}
+func (stub *StubBroker) Join(_ SubscriberMsg) {}
 
-func (stub *StubRoom) Leave(_ chan []byte) {}
+func (stub *StubBroker) Leave(_ chan []byte) {}
 
-func (stub *StubRoom) SendMessage(_ SentMsg) {}
+func (stub *StubBroker) SendMessage(_ SentMsg) {}
 
-func (stub *StubRoom) Stop(code int) {
+func (stub *StubBroker) Stop(code int) {
 	stub.stopCode = code
 }
 
-func (stub *StubRoom) IsExpired(_ time.Time) bool {
+func (stub *StubBroker) IsExpired(_ time.Time) bool {
 	return stub.isExpired
 }
 
-func (stub *StubRoom) IsPublic() bool {
+func (stub *StubBroker) IsPublic() bool {
 	return true
 }
 
-func TestRoomsMap_StoreThenLoad(t *testing.T) {
+func TestBrokerStore_StoreThenLoad(t *testing.T) {
 	var testStore = []string{"123", "123", "456", "789"}
 
 	type TestLoad struct {
@@ -50,20 +50,20 @@ func TestRoomsMap_StoreThenLoad(t *testing.T) {
 		{code: "555", expExists: false},
 	}
 
-	rooms := NewRoomsMap(time.Second)
+	rooms := NewBrokerStore(time.Second)
 
 	for _, test := range testStore {
-		rooms.Store(test, &StubRoom{code: test})
+		rooms.Set(test, &StubBroker{code: test})
 	}
 	for _, test := range testLoad {
-		exists := rooms.Load(test.code) != nil
+		exists := rooms.Get(test.code) != nil
 		if exists != test.expExists {
 			t.Fatalf("Expected loaded room exists to be %t for code %s but got %t", test.expExists, test.code, exists)
 		}
 	}
 }
 
-func TestRoomsMap_StoreThenCodes(t *testing.T) {
+func TestBrokerStore_StoreThenCodes(t *testing.T) {
 	var testStore = []string{"123", "123", "456", "789"}
 
 	type TestCodes struct {
@@ -77,20 +77,20 @@ func TestRoomsMap_StoreThenCodes(t *testing.T) {
 		{offset: 0, limit: 2, expCodes: []string{"123", "123"}},
 	}
 
-	rooms := NewRoomsMap(time.Second)
+	store := NewBrokerStore(time.Second)
 
 	for _, test := range testStore {
-		rooms.Store(test, &StubRoom{code: test})
+		store.Set(test, &StubBroker{code: test})
 	}
 	for i, test := range testCodes {
-		codes := rooms.Codes(test.offset, test.limit)
+		codes := store.Codes(test.offset, test.limit)
 		if !reflect.DeepEqual(codes, test.expCodes) {
 			t.Fatalf("Expected codes to be equal for codes test %d", i)
 		}
 	}
 }
 
-func TestRoomsMap_Cleanup(t *testing.T) {
+func TestBrokerStore_Cleanup(t *testing.T) {
 	type TestStore struct {
 		code      string
 		isExpired bool
@@ -102,19 +102,19 @@ func TestRoomsMap_Cleanup(t *testing.T) {
 		{code: "999", isExpired: false},
 	}
 
-	rooms := NewRoomsMap(time.Second)
+	store := NewBrokerStore(time.Second)
 
-	var toStop []*StubRoom
+	var toStop []*StubBroker
 	for _, test := range testStore {
-		stub := &StubRoom{code: test.code, isExpired: test.isExpired}
-		// only tests for expired rooms should be stopped
+		stub := &StubBroker{code: test.code, isExpired: test.isExpired}
+		// only tests for expired store should be stopped
 		if test.isExpired {
 			toStop = append(toStop, stub)
 		}
-		rooms.Store(test.code, stub)
+		store.Set(test.code, stub)
 	}
 
-	rooms.purgeExpired(time.Now())
+	store.purgeExpired(time.Now())
 
 	for i, r := range toStop {
 		if r.stopCode != TimeoutCode {
@@ -122,7 +122,7 @@ func TestRoomsMap_Cleanup(t *testing.T) {
 		}
 	}
 
-	codes := rooms.Codes(0, 10)
+	codes := store.Codes(0, 10)
 	if !reflect.DeepEqual(codes, []string{"999"}) {
 		t.Fatalf("Expected codes to be an empty slice after purging all expired codes")
 	}

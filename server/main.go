@@ -7,17 +7,15 @@ package main
 import (
 	"embed"
 	_ "embed"
-	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 	"guessthesketch/game"
 	"guessthesketch/servers"
 	"io/fs"
 	"log"
-	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -28,44 +26,28 @@ var words string
 //go:embed dist/*
 var dist embed.FS
 
+//go:embed .env
+var env string
+
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	var envVars map[string]string
-	envVars, err := godotenv.Read()
-	if err != nil {
-		panic(err)
-	}
-	log.Println("Env vars", envVars)
-
+	envVars := parseEnv(env)
 	jwtSecretKey := envVars["JWT_SECRET_KEY"]
-	dbUser := envVars["DB_USER"]
-	dbName := envVars["DB_NAME"]
-	dbHost := envVars["DB_HOST"]
-	dbPass := envVars["DB_PASSWORD"]
-	dbPort := envVars["DB_PORT"]
+	dbFile := envVars["DB_FILE"]
+
+	db := createDb(dbFile)
+	defer db.Close()
 
 	gameWordBank := strings.Split(words, "\n")
 
-	dataSource := fmt.Sprintf("user=%s dbname=%s host=%s password=%s port=%s sslmode=disable",
-		dbUser, dbName, dbHost, dbPass, dbPort)
-
-	db, err := sqlx.Connect("postgres", dataSource)
-	if err != nil {
-		log.Fatalln(err)
-		return
-	}
-
+	telemetryServer := servers.NewTelemetryServer()
 	roomServer := servers.NewRoomServer(db)
 	authServer := servers.NewAuthServer(jwtSecretKey)
 	playerServer := servers.NewPlayerServer(db, authServer)
-
-	roomsStore := game.NewRoomsMap(time.Minute)
-	roomsServer := servers.NewRoomsServer(roomsStore, authServer, roomServer, gameWordBank)
-	telemetryServer := servers.NewTelemetryServer()
+	drawingServer := servers.NewDrawingServer(db)
+	brokerStore := game.NewBrokerStore(time.Minute)
+	roomsServer := servers.NewRoomsServer(brokerStore, authServer, roomServer, gameWordBank)
 
 	router := mux.NewRouter()
-
 	apiRouter := router.PathPrefix("/api").Subrouter()
 	apiRouter.HandleFunc("/rooms/create", roomsServer.CreateRoom)
 	apiRouter.HandleFunc("/rooms/join", roomsServer.JoinRoom)
@@ -75,11 +57,48 @@ func main() {
 	apiRouter.HandleFunc("/login", authServer.Login)
 	apiRouter.HandleFunc("/logout", authServer.Logout)
 	apiRouter.HandleFunc("/telemetry/subscribe", telemetryServer.Subscribe)
-
+	apiRouter.HandleFunc("/drawings", drawingServer.GetDrawings)
 	addFileServer(router)
 
 	log.Println("Starting the server...")
 	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func createDb(dbFile string) *sqlx.DB {
+	// create the db file if it doesn't exist
+	_, err := os.Stat(dbFile)
+	if os.IsNotExist(err) {
+		_, err := os.Create(dbFile)
+		if err != nil {
+			log.Fatalf("Failed to create database file %s", dbFile)
+			return nil
+		}
+	}
+
+	db, err := sqlx.Open("sqlite3", dbFile)
+	if err != nil {
+		log.Fatalln(err)
+		return nil
+	}
+	return db
+}
+
+func parseEnv(env string) map[string]string {
+	envVars := make(map[string]string)
+
+	lines := strings.Split(env, "\n")
+	for _, line := range lines {
+		index := strings.Index(line, "=")
+		if index == -1 {
+			log.Fatalf("Invalid env format: must contain an = symbol")
+		} else {
+			key := line[:index]
+			value := line[index+1:]
+			envVars[key] = value
+		}
+	}
+
+	return envVars
 }
 
 func addFileServer(router *mux.Router) {

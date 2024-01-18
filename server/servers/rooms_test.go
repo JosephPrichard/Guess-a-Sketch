@@ -15,25 +15,25 @@ import (
 	"testing"
 )
 
-// stub implementation of a rooms store that only stores a single room
-type StubRoomsStore struct {
+// stub implementation of a brokerage that only stores a single broker
+type StubBrokerage struct {
 	code string
-	room game.Room
+	room game.Broker
 }
 
-func (stub *StubRoomsStore) Load(code string) game.Room {
+func (stub *StubBrokerage) Get(code string) game.Broker {
 	if stub.code == code {
 		return stub.room
 	}
 	return nil
 }
 
-func (stub *StubRoomsStore) Store(code string, room game.Room) {
+func (stub *StubBrokerage) Set(code string, room game.Broker) {
 	stub.code = code
 	stub.room = room
 }
 
-func (stub *StubRoomsStore) Codes(_ int, _ int) []string {
+func (stub *StubBrokerage) Codes(_ int, _ int) []string {
 	return []string{stub.code}
 }
 
@@ -46,16 +46,16 @@ func (stub StubAuthenticator) GetSession(_ string) (*JwtSession, error) { return
 
 func (stub StubAuthenticator) GetPlayer(_ string) game.Player { return stub.testPlayer }
 
-// no-op implementation of worker - we don't care about testing this
-type FakeWorker struct{}
+// no-op implementation of handler - we don't care about testing this
+type FakeHandler struct{}
 
-func (fake FakeWorker) DoShutdown(_ []game.GameResult) {}
+func (fake FakeHandler) DoShutdown(_ []game.GameResult) {}
 
-func (fake FakeWorker) DoCapture(_ game.Snapshot) {}
+func (fake FakeHandler) DoCapture(_ game.Snapshot) {}
 
 // e2e tests for the websocket server
 func TestRoomsServer_CreateRoom(t *testing.T) {
-	roomsServer := NewRoomsServer(&StubRoomsStore{}, &StubAuthenticator{}, &FakeWorker{}, []string{})
+	roomsServer := NewRoomsServer(&StubBrokerage{}, &StubAuthenticator{}, &FakeHandler{}, []string{})
 
 	testSettings := game.RoomSettings{}
 
@@ -78,13 +78,13 @@ func TestRoomsServer_CreateRoom(t *testing.T) {
 }
 
 func beforeTestJoinRoom(t *testing.T, initialState game.GameState) (*httptest.Server, *websocket.Conn, game.Player) {
-	testRoom := game.NewGameRoom(initialState, &FakeWorker{})
-	mockRooms := StubRoomsStore{}
+	testRoom := game.NewRoom(initialState, true, &FakeHandler{})
+	mockRooms := StubBrokerage{}
 	go testRoom.Start()
-	mockRooms.Store(initialState.Code(), testRoom)
+	mockRooms.Set(initialState.Code(), testRoom)
 
 	player := GuestUser()
-	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{testPlayer: player}, &FakeWorker{}, []string{})
+	roomsServer := NewRoomsServer(&mockRooms, &StubAuthenticator{testPlayer: player}, &FakeHandler{}, []string{})
 
 	s := httptest.NewServer(http.HandlerFunc(roomsServer.JoinRoom))
 

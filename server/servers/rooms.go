@@ -18,18 +18,21 @@ import (
 
 type RoomsServer struct {
 	upgrade       websocket.Upgrader
-	rooms         game.RoomsStore
+	brokerage     game.Brokerage
 	authenticator Authenticator
-	worker        game.EventHandler
+	handler       game.EventHandler
 	gameWordBank  []string
 }
 
-func NewRoomsServer(rooms game.RoomsStore, authenticator Authenticator, worker game.EventHandler, gameWordBank []string) *RoomsServer {
+func NewRoomsServer(
+	brokerage game.Brokerage, authenticator Authenticator,
+	handler game.EventHandler, gameWordBank []string) *RoomsServer {
+
 	return &RoomsServer{
 		upgrade:       CreateUpgrade(),
-		rooms:         rooms,
+		brokerage:     brokerage,
 		authenticator: authenticator,
-		worker:        worker,
+		handler:       handler,
 		gameWordBank:  gameWordBank,
 	}
 }
@@ -50,7 +53,7 @@ func (server *RoomsServer) GetRooms(w http.ResponseWriter, r *http.Request) {
 		offset = int(parsedOffset)
 	}
 
-	rooms := server.rooms.Codes(offset, 20)
+	rooms := server.brokerage.Codes(offset, 20)
 	w.WriteHeader(http.StatusOK)
 	WriteJson(w, rooms)
 }
@@ -96,10 +99,11 @@ func (server *RoomsServer) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	initialState := game.NewGameState(code, settings)
-	room := game.NewGameRoom(initialState, server.worker)
-	log.Printf("Starting a room for code %s", code)
+	room := game.NewRoom(initialState, settings.IsPublic, server.handler)
 	go room.Start()
-	server.rooms.Store(code, room)
+	server.brokerage.Set(code, room)
+
+	log.Printf("Started room for code %s", code)
 
 	roomCode := RoomCodeResp{Code: code, Settings: settings}
 	w.WriteHeader(http.StatusOK)
@@ -115,7 +119,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 
 	player := server.authenticator.GetPlayer(token)
 
-	room := server.rooms.Load(code)
+	room := server.brokerage.Get(code)
 	if room == nil {
 		WriteError(w, http.StatusNotFound, "Cannot find room for provided code")
 		return
@@ -138,7 +142,7 @@ func (server *RoomsServer) JoinRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 // reads messages from socket and sends them to room
-func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Room, subscriber chan []byte) {
+func (server *RoomsServer) socketListener(ws *websocket.Conn, room game.Broker, subscriber chan []byte) {
 	defer func() {
 		// unsubscribes from the room when the websocket is closed
 		room.Leave(subscriber)
@@ -190,11 +194,15 @@ func NewRoomServer(db *sqlx.DB) *RoomServer {
 }
 
 func (server RoomServer) DoShutdown(results []game.GameResult) {
-	// perform the batch update stats on a separate goroutine
-	go database.UpdateStats(server.db, results)
+	// perform the batch update stats in the background (ignoring the error)
+	go func(results []game.GameResult) {
+		_ = database.UpdateStats(server.db, results)
+	}(results)
 }
 
-func (server RoomServer) DoCapture(drawing game.Snapshot) {
-	// perform a capture operation on a separate goroutine
-	go database.SaveDrawing(server.db, drawing)
+func (server RoomServer) DoCapture(snap game.Snapshot) {
+	// perform a capture operation in the background (ignoring the error)
+	go func(snap game.Snapshot) {
+		_ = database.SaveSnapshot(server.db, snap)
+	}(snap)
 }

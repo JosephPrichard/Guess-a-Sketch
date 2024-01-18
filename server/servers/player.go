@@ -5,7 +5,6 @@
 package servers
 
 import (
-	"github.com/google/uuid"
 	"guessthesketch/database"
 	"net/http"
 
@@ -23,15 +22,15 @@ func NewPlayerServer(db *sqlx.DB, authServer *AuthServer) *PlayerServer {
 
 func (server *PlayerServer) Get(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	id := query.Get("id")
+	username := query.Get("username")
 
-	var player *database.Player
-	err := database.GetPlayer(server.db, player, id)
+	var player database.Player
+	err := database.GetPlayer(server.db, &player, username)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if player == nil {
+	if &player == nil {
 		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
@@ -41,21 +40,11 @@ func (server *PlayerServer) Get(w http.ResponseWriter, r *http.Request) {
 	WriteJson(w, player)
 }
 
-func (server *PlayerServer) NewPlayer(name string) (*database.Player, error) {
-	player := database.Player{ID: uuid.New().String(), Username: name}
-	err := database.CreatePlayer(server.db, player)
-	if err != nil {
-		return nil, err
-	}
-	return &player, nil
-}
-
 func (server *PlayerServer) Leaderboard(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	sort := query.Get("sort")
 
-	players := make([]database.Player, 0)
-	err := database.GetLeaderboard(server.db, players, 50, sort)
+	players, err := database.GetLeaderboard(server.db, 50, sort)
 	if err != nil {
 		WriteError(w, http.StatusNotFound, err.Error())
 		return

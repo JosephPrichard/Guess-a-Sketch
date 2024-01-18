@@ -118,9 +118,7 @@ type JwtSession struct {
 	jwt.RegisteredClaims
 }
 
-type User = game.Player
-
-func NewSession(user User, isGuest bool) JwtSession {
+func NewSession(user game.Player, isGuest bool) JwtSession {
 	expiry := time.Now().Add(24 * time.Hour)
 	claims := jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expiry)}
 	return JwtSession{
@@ -130,6 +128,6 @@ func NewSession(user User, isGuest bool) JwtSession {
 	}
 }
 
-func GuestUser() User {
-	return User{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
+func GuestUser() game.Player {
+	return game.Player{ID: uuid.New(), Name: fmt.Sprintf("Guest %d", 10+rand.Intn(89))}
 }

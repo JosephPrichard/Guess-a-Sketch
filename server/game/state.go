@@ -354,7 +354,7 @@ func (state *GameState) Capture(player Player) Snapshot {
 }
 
 type GameResult struct {
-	PlayerID        uuid.UUID
+	PlayerID        string
 	Points          int
 	Win             bool
 	WordsGuessed    int
@@ -369,7 +369,7 @@ func (state *GameState) CreateGameResults() []GameResult {
 	var results []GameResult
 	for id, score := range state.scoreBoard {
 		results = append(results, GameResult{
-			PlayerID:        id,
+			PlayerID:        id.String(),
 			Points:          score.Points,
 			WordsGuessed:    score.words,
 			DrawingsGuessed: score.drawings,

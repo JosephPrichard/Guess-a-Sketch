@@ -15,19 +15,13 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 )
 
 const HOST = "localhost:8080"
 
-func startRoom(playerCount int) {
-	if playerCount < 1 {
-		log.Fatalf("Cannot start a room with less than 1 player")
-	}
-
+func createRoom() servers.RoomCodeResp {
 	u := fmt.Sprintf("http://%s/api/rooms/create", HOST)
 
 	roomSettings := game.RoomSettings{
@@ -53,33 +47,59 @@ func startRoom(playerCount int) {
 	var roomResp servers.RoomCodeResp
 	err = json.Unmarshal(body, &roomResp)
 	if err != nil {
-		log.Fatalf("Failed to marshal json %v", err)
+		log.Fatalf("Failed to unmarshal json %v", err)
 	}
-	code := roomResp.Code
-
-	// each player waits for all other players to finish joining
-	var wg sync.WaitGroup
-	wg.Add(playerCount)
-
-	// start a host and 9 players
-	go startPlayer(code, true, &wg)
-	for j := 0; j < playerCount-1; j++ {
-		go startPlayer(code, false, &wg)
-	}
+	return roomResp
 }
 
-func startPlayer(code string, isHost bool, wg *sync.WaitGroup) {
-	u := fmt.Sprintf("ws://%s/api/rooms/join?code=%s", HOST, code)
-	ws, _, err := websocket.DefaultDialer.Dial(u, nil)
-	if err != nil {
-		log.Fatalf("%v", err)
+func runRoomClient(playerCount int, roomsWg *sync.WaitGroup) {
+	if playerCount < 1 {
+		log.Fatalf("Cannot start a room with less than 1 player")
 	}
 
-	// when done, wait for all other players to join the room
-	wg.Done()
-	wg.Wait()
+	roomResp := createRoom()
+	wss := joinPlayersToRoom(roomResp.Code, playerCount)
 
-	go startListen(ws)
+	// wait on all player clients to finish
+	var playersWg sync.WaitGroup
+	playersWg.Add(playerCount)
+
+	// start a host and 9 players
+	go runPlayerClient(wss[0], true, &playersWg)
+	for i := 1; i < playerCount; i++ {
+		go runPlayerClient(wss[i], false, &playersWg)
+	}
+
+	playersWg.Wait()
+	roomsWg.Done()
+}
+
+func joinPlayersToRoom(code string, count int) []*websocket.Conn {
+	// create connections and join a room for each player client
+	wss := make([]*websocket.Conn, 0)
+	for i := 0; i < count; i++ {
+		u := fmt.Sprintf("ws://%s/api/rooms/join?code=%s", HOST, code)
+		ws, _, err := websocket.DefaultDialer.Dial(u, nil)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		wss = append(wss, ws)
+	}
+	return wss
+}
+
+func runPlayerClient(ws *websocket.Conn, isHost bool, wg *sync.WaitGroup) {
+	// listen to messages from connection, send a stop signal when we're finished
+	go func(ws *websocket.Conn) {
+		for {
+			_, buf, err := ws.ReadMessage()
+			if err != nil {
+				log.Printf("Server closed connection with err %s", err.Error())
+				return
+			}
+			log.Printf("Received a message from server %s", string(buf))
+		}
+	}(ws)
 
 	if isHost {
 		sendStartMessage(ws)
@@ -87,17 +107,6 @@ func startPlayer(code string, isHost bool, wg *sync.WaitGroup) {
 	// send a draw message 24 times per second
 	for range time.NewTicker(time.Second / 24).C {
 		sendDrawMessage(ws)
-	}
-}
-
-func startListen(ws *websocket.Conn) {
-	for {
-		_, buf, err := ws.ReadMessage()
-		if err != nil {
-			log.Printf("Server closed connection with err %s", err.Error())
-			return
-		}
-		log.Printf("Received a message from server %s", string(buf))
 	}
 }
 
@@ -125,7 +134,6 @@ func sendDrawMessage(ws *websocket.Conn) {
 			Color:  1,
 		},
 	}
-
 	b, err := json.Marshal(input)
 	if err != nil {
 		log.Fatalf("Failed to marshal json %v", err)
@@ -139,15 +147,13 @@ func sendDrawMessage(ws *websocket.Conn) {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	roomCount := 1
+	var roomsWg sync.WaitGroup
 
-	strCount := os.Args[1]
-	count, err := strconv.Atoi(strCount)
-	if err != nil {
-		log.Fatalf("Count argument must be a number: %d", count)
+	for i := 0; i < roomCount; i++ {
+		roomsWg.Add(1)
+		go runRoomClient(10, &roomsWg)
 	}
 
-	for i := 0; i < count; i++ {
-		go startRoom(10)
-	}
+	roomsWg.Wait()
 }

@@ -45,7 +45,7 @@ type OutputPayload[T any] struct {
 	Msg  T   `json:"msg"`
 }
 
-func (room *GameRoom) HandleMessage(message []byte, player Player) ([]byte, error) {
+func (room *Room) HandleMessage(message []byte, player Player) ([]byte, error) {
 	// deserialize payload message from json
 	var payload InputPayload[json.RawMessage]
 	err := json.Unmarshal(message, &payload)
@@ -86,7 +86,7 @@ type BeginMsg struct {
 	NextPlayerIndex int    `json:"nextPlayerIndex"`
 }
 
-func (room *GameRoom) handleStartMessage(player Player) ([]byte, error) {
+func (room *Room) handleStartMessage(player Player) ([]byte, error) {
 	state := &room.state
 
 	if state.PlayerIsNotHost(player) {
@@ -109,7 +109,7 @@ type TextMsg struct {
 	Text string `json:"text"`
 }
 
-func (room *GameRoom) handleTextMessage(msg TextMsg, player Player) ([]byte, error) {
+func (room *Room) handleTextMessage(msg TextMsg, player Player) ([]byte, error) {
 	text := msg.Text
 	if len(text) > MaxChatLen || len(text) < MinChatLen {
 		return nil, fmt.Errorf("Chat message must be less than %d characters in length and more than %d", MaxChatLen, MinChatLen)
@@ -123,7 +123,7 @@ func (room *GameRoom) handleTextMessage(msg TextMsg, player Player) ([]byte, err
 
 type DrawMsg = Circle
 
-func (room *GameRoom) handleDrawMessage(msg DrawMsg, player Player) ([]byte, error) {
+func (room *Room) handleDrawMessage(msg DrawMsg, player Player) ([]byte, error) {
 	state := &room.state
 
 	if state.stage != Playing {
@@ -151,7 +151,7 @@ type PlayerMsg struct {
 	Player      Player `json:"player"`
 }
 
-func (room *GameRoom) HandleJoin(player Player) ([]byte, error) {
+func (room *Room) HandleJoin(player Player) ([]byte, error) {
 	state := &room.state
 
 	err := state.Join(player)
@@ -179,7 +179,7 @@ type FinishMsg struct {
 	DrawScoreInc int       `json:"drawScoreInc"`
 }
 
-func (room *GameRoom) HandleReset() ([]byte, error) {
+func (room *Room) HandleReset() ([]byte, error) {
 	state := &room.state
 	log.Printf("Resetting the game for code %s", state.code)
 
@@ -201,7 +201,7 @@ func (room *GameRoom) HandleReset() ([]byte, error) {
 	return createResponse(FinishCode, msg)
 }
 
-func (room *GameRoom) HandleState() ([]byte, error) {
+func (room *Room) HandleState() ([]byte, error) {
 	state := &room.state
 	b := state.MarshalJson()
 	return createResponse[json.RawMessage](StateCode, b)
