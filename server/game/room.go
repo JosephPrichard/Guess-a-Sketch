@@ -24,6 +24,7 @@ type Broker interface {
 type EventHandler interface {
 	DoShutdown(results []GameResult)
 	DoCapture(snap Snapshot)
+	OnTermination()
 }
 
 type Room struct {
@@ -69,6 +70,7 @@ func NewRoom(initialState GameState, isPublic bool, handler EventHandler) *Room 
 
 func (room *Room) Start() {
 	defer func() {
+		log.Printf("Termination finished for room %s", room.state.code)
 		if panicInfo := recover(); panicInfo != nil {
 			log.Println("Fatal error in room: ", panicInfo)
 		}
@@ -85,6 +87,7 @@ func (room *Room) Start() {
 			room.onResetState()
 		case termCode := <-room.stop:
 			room.onTerminate(termCode)
+			room.handler.OnTermination()
 			return
 		}
 	}
@@ -116,7 +119,8 @@ func (room *Room) IsPublic() bool {
 
 func (room *Room) postponeExpiration() {
 	// set the expiration time for 15 minutes
-	room.expireTime.Store(time.Now().Unix() + 15*60)
+	//room.expireTime.Store(time.Now().Unix() + 15*60)
+	room.expireTime.Store(time.Now().Unix() + 10)
 }
 
 func (room *Room) startResetTimer(timeSecs int) {
@@ -126,39 +130,36 @@ func (room *Room) startResetTimer(timeSecs int) {
 	}()
 }
 
-func (room *Room) broadcast(resp []byte) {
-	for s := range room.subscribers {
-		s <- resp
-	}
-}
-
 type ErrorMsg struct {
 	ErrorDesc string `json:"errorDesc"`
 }
 
 func sendErrorMsg(ch chan []byte, errorDesc string) {
-	msg := ErrorMsg{ErrorDesc: errorDesc}
-	b, err := json.Marshal(msg)
+	e := ErrorMsg{ErrorDesc: errorDesc}
+	buf, err := createResponse[ErrorMsg](ErrorCode, e)
 	if err != nil {
 		log.Println("Failed to serialize error for ws message")
 		return
 	}
-	ch <- b
+	ch <- buf
 }
 
 func (room *Room) onSubscribe(subMsg SubscriberMsg) {
 	resp, err := room.HandleJoin(subMsg.Player)
 	if err != nil {
+		log.Printf("User %v could not subscribe to the room", subMsg.Player)
 		// only the sender should receive the error response
 		sendErrorMsg(subMsg.Subscriber, err.Error())
 		close(subMsg.Subscriber)
 		return
 	}
-	log.Println("User subscribed to the room")
+	log.Printf("User %v subscribed to the room", subMsg.Player)
 
 	room.subscribers[subMsg.Subscriber] = subMsg.Player
 
-	room.broadcast(resp)
+	for s := range room.subscribers {
+		s <- resp
+	}
 
 	// handle the initial message for the room only send to the subscriber
 	resp, err = room.HandleState()
@@ -173,18 +174,22 @@ func (room *Room) onSubscribe(subMsg SubscriberMsg) {
 
 func (room *Room) onUnsubscribe(subscriber chan []byte) {
 	player := room.subscribers[subscriber]
+
 	resp, err := HandleLeave(&room.state, player)
 	if err != nil {
 		// only the sender should receive the error response
 		sendErrorMsg(subscriber, err.Error())
 		return
 	}
-	log.Println("User unsubscribed from the room")
 
 	delete(room.subscribers, subscriber)
 	close(subscriber)
 
-	room.broadcast(resp)
+	for s := range room.subscribers {
+		s <- resp
+	}
+
+	log.Println("User unsubscribed from the room")
 }
 
 func (room *Room) onMessage(sentMsg SentMsg) {
@@ -198,7 +203,9 @@ func (room *Room) onMessage(sentMsg SentMsg) {
 	}
 	// broadcast a non error response to all subscribers
 	if resp != nil {
-		room.broadcast(resp)
+		for s := range room.subscribers {
+			s <- resp
+		}
 	}
 }
 
@@ -207,16 +214,18 @@ func (room *Room) onResetState() {
 	resp, err := room.HandleReset()
 	if err != nil {
 		// if an error does exist, serialize it and replace the success message with it
-		errMsg := ErrorMsg{ErrorDesc: err.Error()}
-		b, err := json.Marshal(errMsg)
+		e := ErrorMsg{ErrorDesc: err.Error()}
+		buf, err := createResponse[ErrorMsg](ErrorCode, e)
 		if err != nil {
 			log.Println("Failed to serialize error for ws message")
 			return
 		}
-		resp = b
+		resp = buf
 	}
 	// broadcast the response to all subscribers - error or not
-	room.broadcast(resp)
+	for s := range room.subscribers {
+		s <- resp
+	}
 	// check to handle the shutdown task
 	if !room.state.HasMoreRounds() {
 		room.handler.DoShutdown(room.state.CreateGameResults())
@@ -230,7 +239,9 @@ func (room *Room) onTerminate(code int) {
 		log.Println("Failed to serialize error for ws message")
 		return
 	}
-	room.broadcast(resp)
+	for s := range room.subscribers {
+		s <- resp
+	}
 	// delete each subscriber from table and close channel
 	for s := range room.subscribers {
 		delete(room.subscribers, s)

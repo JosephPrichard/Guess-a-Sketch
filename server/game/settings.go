@@ -10,9 +10,10 @@ import (
 
 const (
 	MinTimeLimit   = 15
-	MaxTimeLimit   = 240
+	MaxTimeLimit   = 120
 	MinPlayerLimit = 2
 	MaxPlayerLimit = 12
+	MinTotalRounds = 1
 	MaxTotalRounds = 8
 )
 
@@ -48,8 +49,15 @@ func IsSettingsValid(settings RoomSettings) error {
 	if settings.PlayerLimit < MinPlayerLimit || settings.PlayerLimit > MaxPlayerLimit {
 		return fmt.Errorf("Games can only contain between %d and %d players", MinPlayerLimit, MaxPlayerLimit)
 	}
-	if settings.TotalRounds > MaxTotalRounds || settings.TotalRounds < 2 {
-		return fmt.Errorf("Games can only have between 2 and %d rounds", MaxTotalRounds)
+	if settings.TotalRounds > MaxTotalRounds || settings.TotalRounds < MinTotalRounds {
+		return fmt.Errorf("Games can only have between %d and %d rounds", MinTotalRounds, MaxTotalRounds)
 	}
 	return nil
+}
+
+func MockSettings() RoomSettings {
+	var settings RoomSettings
+	SettingsWithDefaults(&settings)
+	settings.SharedWordBank = []string{"Word1", "Word2"}
+	return settings
 }

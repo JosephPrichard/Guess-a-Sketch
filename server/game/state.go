@@ -140,19 +140,20 @@ func (state *GameState) MarshalJson() []byte {
 		CurrPlayer: curr,
 		Canvas:     state.EncodeCanvas(),
 	}
-	b, err := json.Marshal(StateJson{
+	stateJson := StateJson{
 		CurrRound:  state.currRound,
 		Players:    state.Players(),
 		ScoreBoard: state.scoreBoard,
 		ChatLog:    state.chatLog,
 		Turn:       turnJson,
-	})
+	}
+	buf, err := json.Marshal(stateJson)
 
 	if err != nil {
 		log.Println(err.Error())
 		return []byte{}
 	}
-	return b
+	return buf
 }
 
 func (state *GameState) GetCurrPlayer() Player {

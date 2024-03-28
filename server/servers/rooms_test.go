@@ -53,17 +53,19 @@ func (fake FakeHandler) DoShutdown(_ []game.GameResult) {}
 
 func (fake FakeHandler) DoCapture(_ game.Snapshot) {}
 
+func (fake FakeHandler) OnTermination() {}
+
 // e2e tests for the websocket server
 func TestRoomsServer_CreateRoom(t *testing.T) {
 	roomsServer := NewRoomsServer(&StubBrokerage{}, &StubAuthenticator{}, &FakeHandler{}, []string{})
 
 	testSettings := game.RoomSettings{}
 
-	b, err := json.Marshal(testSettings)
+	buf, err := json.Marshal(testSettings)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	body := strings.NewReader(string(b))
+	body := strings.NewReader(string(buf))
 
 	r := httptest.NewRequest("", "/", body)
 	w := httptest.NewRecorder()
@@ -110,19 +112,18 @@ func beforeTestJoinRoom(t *testing.T, initialState game.GameState) (*httptest.Se
 // runs a test for a message with a particular input and expected output against the websocket connection
 func runTestMessage[I any, O any](t *testing.T, ws *websocket.Conn,
 	input game.InputPayload[I], expected game.OutputPayload[O]) {
-
-	b, _ := json.Marshal(input)
-
-	if err := ws.WriteMessage(websocket.TextMessage, b); err != nil {
+	bufIn, _ := json.Marshal(input)
+	if err := ws.WriteMessage(websocket.TextMessage, bufIn); err != nil {
 		t.Fatalf("%v", err)
 	}
-	_, p, err := ws.ReadMessage()
+
+	_, bufOut, err := ws.ReadMessage()
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
 	var payload game.OutputPayload[O]
-	err = json.Unmarshal(p, &payload)
+	err = json.Unmarshal(bufOut, &payload)
 	if err != nil {
 		t.Fatalf("Failed to unmarhsall output payload, didn't receieve the expected type")
 	}

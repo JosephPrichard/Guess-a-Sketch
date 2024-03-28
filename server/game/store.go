@@ -23,23 +23,23 @@ type BrokerStore struct {
 }
 
 func NewBrokerStore(period time.Duration) *BrokerStore {
-	rooms := &BrokerStore{
+	store := &BrokerStore{
 		m:     make(map[string]Broker),
 		codes: make([]string, 0),
 	}
-	go rooms.startCleanup(period)
-	return rooms
+	go store.startCleanup(period)
+	return store
 }
 
 func (store *BrokerStore) Get(code string) Broker {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	room, ok := store.m[code]
-	if !ok || room.IsExpired(time.Now()) {
+	broker, ok := store.m[code]
+	if !ok || broker.IsExpired(time.Now()) {
 		return nil
 	}
-	return room
+	return broker
 }
 
 func (store *BrokerStore) Set(code string, b Broker) {
@@ -76,16 +76,20 @@ func (store *BrokerStore) purgeExpired(now time.Time) {
 	defer store.mu.Unlock()
 
 	expiredCodes := make(map[string]bool)
-	for code, room := range store.m {
-		// check if this room has expired already, if so delete it
-		if room.IsExpired(now) {
-			log.Printf("Deleting room for code %s", code)
-			// terminate the room due to expiration with a timeout code
-			room.Stop(TimeoutCode)
+	for code, broker := range store.m {
+		// check if this broker has expired already, if so delete it
+		if broker.IsExpired(now) {
+			log.Printf("Deleting broker for code %s", code)
+
+			// send the termination signal to the broker
+			go broker.Stop(TimeoutCode)
+
 			delete(store.m, code)
 			expiredCodes[code] = true
 		}
 	}
+	log.Printf("Checked brokers for codes %v", expiredCodes)
+
 	// remove all expired codes from the slice
 	for i := 0; i < len(store.codes); i++ {
 		code := store.codes[i]
@@ -99,6 +103,7 @@ func (store *BrokerStore) purgeExpired(now time.Time) {
 			i--
 		}
 	}
+	log.Println("Finished purging brokers for store")
 }
 
 func (store *BrokerStore) startCleanup(period time.Duration) {

@@ -13,13 +13,6 @@ import (
 	"testing"
 )
 
-func MockSettings() RoomSettings {
-	var settings RoomSettings
-	SettingsWithDefaults(&settings)
-	settings.SharedWordBank = []string{"Word1", "Word2"}
-	return settings
-}
-
 func TestState_Join(t *testing.T) {
 	state := NewGameState("123", MockSettings())
 

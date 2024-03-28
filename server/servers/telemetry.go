@@ -105,13 +105,13 @@ func (server *TelemetryServer) subscriberListener(ws *websocket.Conn, subscriber
 			ClientCount int `json:"clientCount"`
 		}
 		resp := MetaResp{ClientCount: clientCount}
-		b, err := json.Marshal(resp)
+		buf, err := json.Marshal(resp)
 		if err != nil {
 			log.Println("Failed to serialize meta resp")
 			return
 		}
 
-		err = ws.WriteMessage(websocket.TextMessage, b)
+		err = ws.WriteMessage(websocket.TextMessage, buf)
 		if err != nil {
 			log.Printf("Error writing message %s", err)
 			return

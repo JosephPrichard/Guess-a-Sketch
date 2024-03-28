@@ -5,8 +5,10 @@
 package servers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
 	"log"
@@ -21,13 +23,13 @@ type ErrorResp struct {
 
 func WriteError(w http.ResponseWriter, status int, errorDesc string) {
 	resp := ErrorResp{Status: status, ErrorDesc: errorDesc}
-	b, err := json.Marshal(resp)
+	buf, err := json.Marshal(resp)
 	if err != nil {
 		log.Println("Failed to serialize error for http response")
 		return
 	}
 	w.WriteHeader(resp.Status)
-	_, err = w.Write(b)
+	_, err = w.Write(buf)
 	if err != nil {
 		log.Println("Failed to write body to response")
 		return
@@ -48,12 +50,12 @@ func ReadJson[T any](r *http.Request, result *T) error {
 }
 
 func WriteJson(w http.ResponseWriter, v any) {
-	b, err := json.Marshal(v)
+	buf, err := json.Marshal(v)
 	if err != nil {
 		log.Println("Failed to marshal json response")
 		return
 	}
-	_, err = w.Write(b)
+	_, err = w.Write(buf)
 	if err != nil {
 		log.Println("Failed to write body as response")
 		return
@@ -75,4 +77,22 @@ func CreateUpgrade() websocket.Upgrader {
 		return true
 	}
 	return upgrade
+}
+
+func PostJson(url string, v any) ([]byte, error) {
+	jsonBody, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to marshal json %v", err)
+	}
+	resp, err := http.Post(url, "text/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("Error: %s", err)
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading resp body: %s", err)
+	}
+	return body, nil
 }

@@ -206,3 +206,5 @@ func (server RoomServer) DoCapture(snap game.Snapshot) {
 		_ = database.SaveSnapshot(server.db, snap)
 	}(snap)
 }
+
+func (server RoomServer) OnTermination() {}

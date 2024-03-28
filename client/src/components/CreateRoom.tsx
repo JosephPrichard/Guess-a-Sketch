@@ -8,8 +8,8 @@ import { TempMsgContext, BACKEND_URL } from "../App";
 import { useNavigate } from "@solidjs/router";
 
 const MAX_PLAYER_SETTINGS = Array.from({ length: 11 }, (_, index) => 2 + index);
-const ROUNDS_SETTINGS = Array.from({ length: 7 }, (_, index) => 2 + index);
-const DRAW_TIME_SETTINGS = Array.from({ length: 12 }, (_, index) => 15 * (index + 1));
+const ROUNDS_SETTINGS = Array.from({ length: 7 }, (_, index) => 1 + index);
+const DRAW_TIME_SETTINGS = Array.from({ length: 8 }, (_, index) => 15 * (index + 1));
 
 interface Props {
     onClose: () => void;
